@@ -3,6 +3,25 @@
   "version": "0.1.0",
   "description": "Text reports for local Codex usage over a selected time period",
   "type": "module",
+  "homepage": "https://github.com/flkrnr/codex-report#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flkrnr/codex-report.git"
+  },
+  "bugs": {
+    "url": "https://github.com/flkrnr/codex-report/issues"
+  },
+  "keywords": [
+    "codex",
+    "codex-cli",
+    "usage",
+    "report",
+    "stats"
+  ],
+  "files": [
+    "bin",
+    "README.md"
+  ],
   "bin": {
     "codex-report": "./bin/codex-report.js"
   },
