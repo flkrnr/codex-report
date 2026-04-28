@@ -5,6 +5,32 @@ Text reports for local Codex usage over a selected time period.
 The CLI reads Codex session JSONL files from `~/.codex/sessions` and prints
 session, message, token, model, project, tool, and activity stats.
 
+## Install locally
+
+Link the package globally from the project directory:
+
+```bash
+npm link
+```
+
+After linking, run it from anywhere:
+
+```bash
+codex-report
+```
+
+Verify the linked binary:
+
+```bash
+which codex-report
+```
+
+Remove the global link:
+
+```bash
+npm unlink -g codex-report
+```
+
 ## Usage
 
 Report the current git project from the beginning of the available local data
