@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
+import { execFileSync } from "node:child_process";
 
 const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
@@ -15,11 +16,11 @@ const TOKEN_KEYS = [
 ];
 
 function usage() {
-  console.error("Usage: codex-report [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10]");
+  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10]");
 }
 
 function parseArgs(argv) {
-  const args = { from: null, to: null, top: 10 };
+  const args = { from: null, to: null, global: false, top: 10 };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -31,6 +32,8 @@ function parseArgs(argv) {
     } else if (arg === "--to") {
       args.to = next;
       index += 1;
+    } else if (arg === "--global") {
+      args.global = true;
     } else if (arg === "--top") {
       args.top = Number.parseInt(next, 10);
       index += 1;
@@ -95,6 +98,40 @@ function label(value) {
     return String(value);
   }
   return JSON.stringify(value, Object.keys(value).sort());
+}
+
+function currentGitRoot() {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function resolveScope(forceGlobal) {
+  if (forceGlobal) {
+    return { type: "global", label: "global" };
+  }
+
+  const root = currentGitRoot();
+  if (!root) {
+    return { type: "global", label: "global (not in a git project)" };
+  }
+
+  return { type: "project", root, label: `project ${root}` };
+}
+
+function isInsideProject(cwd, projectRoot) {
+  if (cwd === "(unknown)") {
+    return false;
+  }
+
+  const relative = path.relative(projectRoot, cwd);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 function increment(map, key, amount = 1) {
@@ -260,6 +297,7 @@ function printTop(title, map, limit) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const scope = resolveScope(args.global);
   const start = parseDate(args.from);
   const end = parseDate(args.to ?? localDay(new Date()), { endOfDay: !args.to?.includes("T") });
   const files = await sessionFiles(SESSIONS_DIR);
@@ -267,7 +305,7 @@ async function main() {
 
   for (const file of files) {
     const session = await readSession(file, start, end);
-    if (session) {
+    if (session && (scope.type === "global" || isInsideProject(session.cwd, scope.root))) {
       sessions.push(session);
     }
   }
@@ -305,6 +343,7 @@ async function main() {
   ), null) ?? end;
 
   console.log("Codex usage stats");
+  console.log(`Scope: ${scope.label}`);
   console.log(`Period: ${localDay(start ?? firstDay)} to ${localDay(end)}`);
   console.log(`Sessions: ${fmtInt(sessions.length)}`);
   console.log(`Messages: ${fmtInt(totalMessages)} (${fmtInt(messages.get("user") ?? 0)} user, ${fmtInt(messages.get("assistant") ?? 0)} assistant)`);
