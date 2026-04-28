@@ -1,6 +1,6 @@
 {
   "name": "codex-report",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Text reports for local Codex usage over a selected time period",
   "type": "module",
   "homepage": "https://github.com/flkrnr/codex-report#readme",
