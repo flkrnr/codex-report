@@ -5,30 +5,31 @@ Text reports for local Codex usage over a selected time period.
 The CLI reads Codex session JSONL files from `~/.codex/sessions` and prints
 session, message, token, model, project, tool, and activity stats.
 
-## Install locally
+## Quick start
 
-Link the package globally from the project directory:
+Run without installing:
 
 ```bash
-npm link
+npx codex-report
 ```
 
-After linking, run it from anywhere:
+Or install globally:
 
 ```bash
+npm install -g codex-report
 codex-report
 ```
 
-Verify the linked binary:
+Verify the installed binary:
 
 ```bash
 which codex-report
 ```
 
-Remove the global link:
+Remove the global install:
 
 ```bash
-npm unlink -g codex-report
+npm uninstall -g codex-report
 ```
 
 ## Usage
@@ -37,25 +38,25 @@ Report the current git project from the beginning of the available local data
 through today:
 
 ```bash
-node ./bin/codex-report.js
+codex-report
 ```
 
 Report across all local Codex sessions:
 
 ```bash
-node ./bin/codex-report.js --global
+codex-report --global
 ```
 
 Report a specific period:
 
 ```bash
-node ./bin/codex-report.js --from 2026-04-01 --to 2026-04-28
+codex-report --from 2026-04-01 --to 2026-04-28
 ```
 
 Limit top lists with `--top`:
 
 ```bash
-node ./bin/codex-report.js --top 5
+codex-report --top 5
 ```
 
 ## Example output
