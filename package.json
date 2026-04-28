@@ -1,7 +1,7 @@
 {
   "name": "codex-report",
   "version": "0.1.1",
-  "description": "Text reports for local Codex usage over a selected time period",
+  "description": "a tiny CLI that shows how much you're actually burning with Codex.",
   "type": "module",
   "homepage": "https://github.com/flkrnr/codex-report#readme",
   "repository": {

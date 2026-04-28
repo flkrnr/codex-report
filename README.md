@@ -1,6 +1,6 @@
 # codex-report
 
-Text reports for local Codex usage over a selected time period.
+A tiny CLI that shows how much you're actually burning with Codex.
 
 The CLI reads Codex session JSONL files from `~/.codex/sessions` and prints
 session, message, token, model, project, tool, and activity stats.
