@@ -8,7 +8,7 @@
   },
   "scripts": {
     "report": "node ./bin/codex-report.js",
-    "test": "node ./bin/codex-report.js --from 2026-04-28 --to 2026-04-28 --top 3"
+    "test": "node ./bin/codex-report.js --top 3"
   },
   "engines": {
     "node": ">=20"

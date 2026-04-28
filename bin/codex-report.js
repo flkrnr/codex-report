@@ -15,7 +15,7 @@ const TOKEN_KEYS = [
 ];
 
 function usage() {
-  console.error("Usage: codex-report --to YYYY-MM-DD [--from YYYY-MM-DD|null] [--top 10]");
+  console.error("Usage: codex-report [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10]");
 }
 
 function parseArgs(argv) {
@@ -42,9 +42,6 @@ function parseArgs(argv) {
     }
   }
 
-  if (!args.to) {
-    throw new Error("--to is required");
-  }
   if (!Number.isInteger(args.top) || args.top < 1) {
     throw new Error("--top must be a positive integer");
   }
@@ -264,7 +261,7 @@ function printTop(title, map, limit) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const start = parseDate(args.from);
-  const end = parseDate(args.to, { endOfDay: !args.to.includes("T") });
+  const end = parseDate(args.to ?? localDay(new Date()), { endOfDay: !args.to?.includes("T") });
   const files = await sessionFiles(SESSIONS_DIR);
   const sessions = [];
 
