@@ -23,7 +23,7 @@
     "README.md"
   ],
   "bin": {
-    "codex-report": "./bin/codex-report.js"
+    "codex-report": "bin/codex-report.js"
   },
   "scripts": {
     "report": "node ./bin/codex-report.js",
