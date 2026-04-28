@@ -66,3 +66,9 @@ node ./bin/codex-report.js --top 5
 - When run outside a git project, the CLI falls back to a global report.
 - Dates without times are interpreted in the local timezone.
 - Token totals are based on `last_token_usage` entries in Codex session logs.
+- Reports include all Codex sessions in the same local `~/.codex/sessions`
+  directory, even if they were created under different Codex logins.
+- Sessions from other OS users, machines, containers, or custom Codex home
+  directories are not included.
+- Stats are not split by Codex login because the local session logs do not
+  expose a stable account identifier.
