@@ -1,0 +1,17 @@
+{
+  "name": "codex-report",
+  "version": "0.1.0",
+  "description": "Text reports for local Codex usage over a selected time period",
+  "type": "module",
+  "bin": {
+    "codex-report": "./bin/codex-report.js"
+  },
+  "scripts": {
+    "report": "node ./bin/codex-report.js",
+    "test": "node ./bin/codex-report.js --from 2026-04-28 --to 2026-04-28 --top 3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
