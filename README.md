@@ -85,33 +85,33 @@ $ codex-report --global
 │   Sun  ██████████████░░░░░░░░░░░░░░    3,855 messages | 803M tok                     │
 │                                                                                      │
 │ Top projects                                                                         │
-│   /Users/flkrnr/code/product-api              205 sessions  ███████░░░░░░░░░  43%    │
-│   /Users/flkrnr/code/mobile-app               194 sessions  ███████░░░░░░░░░  41%    │
-│   /Users/flkrnr/code/design-system             39 sessions  █░░░░░░░░░░░░░░░   8%    │
+│   ~/code/product-api                          205 sessions    ███████░░░░░░░░░  43%  │
+│   ~/code/mobile-app                           194 sessions    ███████░░░░░░░░░  41%  │
+│   ~/code/design-system                         39 sessions    █░░░░░░░░░░░░░░░   8%  │
 │                                                                                      │
 │ Top models                                                                           │
-│   gpt-5.2-codex                                 6,689 turns  █████░░░░░░░░░░░  29%   │
-│   gpt-5.4                                       4,745 turns  ███░░░░░░░░░░░░░  20%   │
-│   gpt-5.3-codex                                 3,909 turns  ███░░░░░░░░░░░░░  17%   │
+│   gpt-5.2-codex                                 6,689 turns   █████░░░░░░░░░░░  29%  │
+│   gpt-5.4                                       4,745 turns   ███░░░░░░░░░░░░░  20%  │
+│   gpt-5.3-codex                                 3,909 turns   ███░░░░░░░░░░░░░  17%  │
 │                                                                                      │
 │ Top tools                                                                            │
-│   exec_command                                 46,384 calls  ██████████░░░░░░  63%   │
-│   apply_patch                                   8,287 calls  ██░░░░░░░░░░░░░░  11%   │
-│   write_stdin                                   7,649 calls  ██░░░░░░░░░░░░░░  10%   │
+│   exec_command                                 46,384 calls   ██████████░░░░░░  63%  │
+│   apply_patch                                   8,287 calls   ██░░░░░░░░░░░░░░  11%  │
+│   write_stdin                                   7,649 calls   ██░░░░░░░░░░░░░░  10%  │
 │                                                                                      │
 │ Activity by day                                                                      │
-│   2026-03-25                              2.4K msg | 402M tok  █░░░░░░░░░░░░░░░   7% │
-│   2026-03-08                              2.3K msg | 380M tok  █░░░░░░░░░░░░░░░   7% │
-│   2026-03-14                              1.5K msg | 348M tok  █░░░░░░░░░░░░░░░   4% │
+│   2026-03-25                              2.4K msg | 402M tok █░░░░░░░░░░░░░░░   7%  │
+│   2026-03-08                              2.3K msg | 380M tok █░░░░░░░░░░░░░░░   7%  │
+│   2026-03-14                              1.5K msg | 348M tok █░░░░░░░░░░░░░░░   4%  │
 │                                                                                      │
 │ Sources                                                                              │
-│   vscode                                       372 sessions  █████████████░░░  78%   │
-│   cli                                           81 sessions  ███░░░░░░░░░░░░░  17%   │
-│   codex_cli_rs                                  17 sessions  █░░░░░░░░░░░░░░░   4%   │
+│   vscode                                       372 sessions   █████████████░░░  78%  │
+│   cli                                           81 sessions   ███░░░░░░░░░░░░░  17%  │
+│   codex_cli_rs                                  17 sessions   █░░░░░░░░░░░░░░░   4%  │
 │                                                                                      │
 │ Providers                                                                            │
-│   openai                                       454 sessions  ███████████████░  95%   │
-│   (unknown)                                     22 sessions  █░░░░░░░░░░░░░░░   5%   │
+│   openai                                       454 sessions   ███████████████░  95%  │
+│   (unknown)                                     22 sessions   █░░░░░░░░░░░░░░░   5%  │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
