@@ -357,12 +357,13 @@ function bar(value, total, width = 16) {
 
 function topLine(name, count, total, unit, innerWidth) {
   const nameWidth = 24;
-  const countWidth = 13;
   const barWidth = 16;
+  const percentWidth = 4;
+  const countWidth = Math.max(16, innerWidth - 2 - nameWidth - 1 - 2 - barWidth - 1 - percentWidth);
   const percent = total > 0 ? Math.round((count / total) * 100) : 0;
   const left = `  ${truncateMiddle(name, nameWidth).padEnd(nameWidth)}`;
   const middle = `${fmtInt(count)} ${unit}`.padStart(countWidth);
-  const right = `${bar(count, total, barWidth)} ${String(percent).padStart(3)}%`;
+  const right = `${bar(count, total, barWidth)} ${`${percent}%`.padStart(percentWidth)}`;
   return boxedLine(`${left} ${middle}  ${right}`, innerWidth);
 }
 
