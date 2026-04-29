@@ -434,13 +434,19 @@ function topSection(lines, title, map, limit, unit, innerWidth) {
   }
 }
 
-function activityLine(name, activity, maxMessages, innerWidth) {
+function activityLine(name, activity, totalMessages, innerWidth) {
   const barWidth = 16;
+  const percentWidth = 4;
   const detailWidth = 28;
-  const nameWidth = Math.max(12, innerWidth - 2 - 1 - barWidth - 1 - detailWidth);
+  const availableNameWidth = innerWidth - 2 - 1 - detailWidth - 2 - barWidth - 1 - percentWidth;
+  const nameWidth = Math.max(12, Math.min(44, availableNameWidth));
+  const percent = totalMessages > 0 ? Math.round((activity.messages / totalMessages) * 100) : 0;
   const detail = `${fmtInt(activity.messages)} messages | ${fmtCompact(activity.tokens)} tok`;
   const displayName = name.includes("/") ? truncatePath(name, nameWidth) : truncateMiddle(name, nameWidth);
-  return boxedLine(`  ${displayName.padEnd(nameWidth)} ${bar(activity.messages, maxMessages, barWidth)} ${truncate(detail, detailWidth).padStart(detailWidth)}`, innerWidth);
+  const left = `  ${displayName.padEnd(nameWidth)}`;
+  const middle = truncate(detail, detailWidth).padStart(detailWidth);
+  const right = `${bar(activity.messages, totalMessages, barWidth)} ${`${percent}%`.padStart(percentWidth)}`;
+  return boxedLine(`${left} ${middle}  ${right}`, innerWidth);
 }
 
 function activitySection(lines, title, map, limit, innerWidth) {
@@ -451,9 +457,9 @@ function activitySection(lines, title, map, limit, innerWidth) {
     return;
   }
 
-  const maxMessages = Math.max(...entries.map(([, activity]) => activity.messages), 0);
+  const totalMessages = entries.reduce((sum, [, activity]) => sum + activity.messages, 0);
   for (const [name, activity] of entries.slice(0, limit)) {
-    lines.push(activityLine(name, activity, maxMessages, innerWidth));
+    lines.push(activityLine(name, activity, totalMessages, innerWidth));
   }
 }
 
