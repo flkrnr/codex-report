@@ -466,13 +466,13 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   lines.push(infoLine("Busiest day", `${busiestDay[0]} (${fmtInt(busiestDay[1])} sessions)`, innerWidth));
   lines.push(boxedBlank(innerWidth));
 
+  weeklyActivitySection(lines, sessions, innerWidth);
+  lines.push(boxedBlank(innerWidth));
   if (scope.type === "global") {
     topSection(lines, "Top projects", projects, args.top, "sessions", innerWidth);
     lines.push(boxedBlank(innerWidth));
   }
 
-  weeklyActivitySection(lines, sessions, innerWidth);
-  lines.push(boxedBlank(innerWidth));
   topSection(lines, "Top models", models, args.top, "turns", innerWidth);
   lines.push(boxedBlank(innerWidth));
   topSection(lines, "Top tools", tools, args.top, "calls", innerWidth);

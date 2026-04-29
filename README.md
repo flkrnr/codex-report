@@ -75,11 +75,6 @@ $ codex-report --global
 │ Active days 137 · longest streak 35 days                                             │
 │ Busiest day 2026-02-28 (563 sessions)                                                │
 │                                                                                      │
-│ Top projects                                                                         │
-│   /Users/flkrnr/code/product-api  2,872 sessions  ██████████████░░  86%              │
-│   /Users/flkrnr/code/mobile-app     221 sessions  █░░░░░░░░░░░░░░░   7%              │
-│   /Users/flkrnr/code/design-system  198 sessions  █░░░░░░░░░░░░░░░   6%              │
-│                                                                                      │
 │ Weekly activity                                                                      │
 │   Mon  ██████████████████████████░░ 797 sessions                                     │
 │   Tue  ████████████░░░░░░░░░░░░░░░░ 358 sessions                                     │
@@ -88,6 +83,11 @@ $ codex-report --global
 │   Fri  ███████░░░░░░░░░░░░░░░░░░░░░ 214 sessions                                     │
 │   Sat  ████████████████████████████ 858 sessions                                     │
 │   Sun  █████████████████████░░░░░░░ 656 sessions                                     │
+│                                                                                      │
+│ Top projects                                                                         │
+│   /Users/flkrnr/code/product-api  2,872 sessions  ██████████████░░  86%              │
+│   /Users/flkrnr/code/mobile-app     221 sessions  █░░░░░░░░░░░░░░░   7%              │
+│   /Users/flkrnr/code/design-system  198 sessions  █░░░░░░░░░░░░░░░   6%              │
 │                                                                                      │
 │ Top models                                                                           │
 │   gpt-5.2-codex              6,689 turns  █████░░░░░░░░░░░  29%                      │
