@@ -15,7 +15,7 @@ const TOKEN_KEYS = [
   "total_tokens",
 ];
 const BOX_MIN_WIDTH = 76;
-const BOX_MAX_WIDTH = 140;
+const BOX_MAX_WIDTH = 110;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function usage() {
@@ -380,7 +380,8 @@ function topLine(name, count, total, unit, innerWidth) {
   const barWidth = 16;
   const percentWidth = 4;
   const countWidth = 16;
-  const nameWidth = Math.max(24, innerWidth - 2 - 1 - countWidth - 2 - barWidth - 1 - percentWidth);
+  const availableNameWidth = innerWidth - 2 - 1 - countWidth - 2 - barWidth - 1 - percentWidth;
+  const nameWidth = Math.max(24, Math.min(44, availableNameWidth));
   const percent = total > 0 ? Math.round((count / total) * 100) : 0;
   const displayName = name.includes("/") ? truncatePath(name, nameWidth) : truncateMiddle(name, nameWidth);
   const left = `  ${displayName.padEnd(nameWidth)}`;
