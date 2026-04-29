@@ -16,6 +16,7 @@ const TOKEN_KEYS = [
 ];
 const BOX_MIN_WIDTH = 76;
 const BOX_MAX_WIDTH = 140;
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function usage() {
   console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10]");
@@ -406,6 +407,38 @@ function topSection(lines, title, map, limit, unit, innerWidth) {
   }
 }
 
+function weekdayIndex(date) {
+  return (date.getDay() + 6) % 7;
+}
+
+function weeklyActivity(sessions) {
+  const counts = new Map(WEEKDAYS.map((day) => [day, 0]));
+  for (const session of sessions) {
+    const day = WEEKDAYS[weekdayIndex(session.firstTs)];
+    increment(counts, day);
+  }
+  return counts;
+}
+
+function weeklyActivitySection(lines, sessions, innerWidth) {
+  const counts = weeklyActivity(sessions);
+  const maxCount = Math.max(...counts.values(), 0);
+  const labelWidth = 5;
+  const countWidth = 12;
+  const barWidth = Math.max(12, Math.min(28, innerWidth - 2 - labelWidth - 2 - countWidth));
+
+  lines.push(boxedLine("Weekly activity", innerWidth));
+  if (maxCount === 0) {
+    lines.push(boxedLine("  none", innerWidth));
+    return;
+  }
+
+  for (const [day, count] of counts) {
+    const line = `  ${day.padEnd(labelWidth)}${bar(count, maxCount, barWidth)} ${`${fmtInt(count)} sessions`.padStart(countWidth)}`;
+    lines.push(boxedLine(line, innerWidth));
+  }
+}
+
 function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, providers, sources, models }) {
   const width = terminalWidth();
   const innerWidth = width - 4;
@@ -437,6 +470,8 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
     lines.push(boxedBlank(innerWidth));
   }
 
+  weeklyActivitySection(lines, sessions, innerWidth);
+  lines.push(boxedBlank(innerWidth));
   topSection(lines, "Top models", models, args.top, "turns", innerWidth);
   lines.push(boxedBlank(innerWidth));
   topSection(lines, "Top tools", tools, args.top, "calls", innerWidth);

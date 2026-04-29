@@ -80,6 +80,15 @@ $ codex-report --global
 │   /Users/flkrnr/code/mobile-app     221 sessions  █░░░░░░░░░░░░░░░   7%              │
 │   /Users/flkrnr/code/design-system  198 sessions  █░░░░░░░░░░░░░░░   6%              │
 │                                                                                      │
+│ Weekly activity                                                                      │
+│   Mon  ██████████████████████████░░ 797 sessions                                     │
+│   Tue  ████████████░░░░░░░░░░░░░░░░ 358 sessions                                     │
+│   Wed  ████████░░░░░░░░░░░░░░░░░░░░ 242 sessions                                     │
+│   Thu  ████████░░░░░░░░░░░░░░░░░░░░ 230 sessions                                     │
+│   Fri  ███████░░░░░░░░░░░░░░░░░░░░░ 214 sessions                                     │
+│   Sat  ████████████████████████████ 858 sessions                                     │
+│   Sun  █████████████████████░░░░░░░ 656 sessions                                     │
+│                                                                                      │
 │ Top models                                                                           │
 │   gpt-5.2-codex              6,689 turns  █████░░░░░░░░░░░  29%                      │
 │   gpt-5.4                    4,745 turns  ███░░░░░░░░░░░░░  20%                      │
