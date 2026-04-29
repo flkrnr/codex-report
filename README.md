@@ -64,47 +64,37 @@ codex-report --top 5
 ```text
 $ codex-report --global
 
-Codex usage stats
-Scope: global
-Period: 2025-09-01 to 2026-04-28
-Sessions: 1,248
-Messages: 18,932 (4,321 user, 14,611 assistant)
-Tokens: 2,845,931,420 total
-  Input: 2,812,114,902, cached input: 2,441,870,144
-  Output: 21,104,318, reasoning output: 12,712,200
-Projects: 8
-Active days: 96
-Longest streak: 21 days
-Busiest day: 2026-02-14 (84 sessions)
-
-Top projects
-  /Users/flkrnr/code/product-api: 2,872
-  /Users/flkrnr/code/mobile-app: 219
-  /Users/flkrnr/code/design-system: 198
-
-Top models
-  gpt-5.2-codex: 6,689
-  gpt-5.4: 4,745
-  gpt-5.3-codex: 3,909
-
-Providers
-  openai: 3,328
-  (unknown): 24
-
-Sources
-  cli: 2,957
-  vscode: 370
-  codex_cli_rs: 19
-
-Top tools
-  exec_command: 46,042
-  apply_patch: 8,250
-  write_stdin: 7,550
-
-Activity by day
-  2026-02-28: 563
-  2026-02-16: 552
-  2026-02-15: 377
+┌─ codex-report ───────────────────────────────────────────────────────────────────────┐
+│ Scope       global                                                                   │
+│ Period      2025-09-19 → 2026-04-29                                                  │
+│ Sessions    3,355                                                                    │
+│ Projects    13                                                                       │
+│ Messages    34,655 (8,008 user, 26,647 assistant)                                    │
+│ Tokens      7,879,502,780 total                                                      │
+│             7,812,940,332 input · 7,193,757,440 cached · 36,158,480 output           │
+│ Active days 137 · longest streak 35 days                                             │
+│ Busiest day 2026-02-28 (563 sessions)                                                │
+│                                                                                      │
+│ Top projects                                                                         │
+│   /Users/flkrnr/code/product-api  2,872 sessions  ██████████████░░  86%              │
+│   /Users/flkrnr/code/mobile-app     221 sessions  █░░░░░░░░░░░░░░░   7%              │
+│   /Users/flkrnr/code/design-system  198 sessions  █░░░░░░░░░░░░░░░   6%              │
+│                                                                                      │
+│ Top models                                                                           │
+│   gpt-5.2-codex              6,689 turns  █████░░░░░░░░░░░  29%                      │
+│   gpt-5.4                    4,745 turns  ███░░░░░░░░░░░░░  20%                      │
+│   gpt-5.3-codex              3,909 turns  ███░░░░░░░░░░░░░  17%                      │
+│                                                                                      │
+│ Top tools                                                                            │
+│   exec_command              46,294 calls  ██████████░░░░░░  63%                      │
+│   apply_patch                8,267 calls  ██░░░░░░░░░░░░░░  11%                      │
+│   write_stdin                7,603 calls  ██░░░░░░░░░░░░░░  10%                      │
+│                                                                                      │
+│ Activity by day                                                                      │
+│   2026-02-28                563 sessions  ███░░░░░░░░░░░░░  17%                      │
+│   2026-02-16                552 sessions  ███░░░░░░░░░░░░░  16%                      │
+│   2026-02-15                377 sessions  ██░░░░░░░░░░░░░░  11%                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Notes

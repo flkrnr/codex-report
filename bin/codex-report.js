@@ -14,6 +14,8 @@ const TOKEN_KEYS = [
   "reasoning_output_tokens",
   "total_tokens",
 ];
+const BOX_MIN_WIDTH = 76;
+const BOX_MAX_WIDTH = 110;
 
 function usage() {
   console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10]");
@@ -278,21 +280,153 @@ function fmtInt(value) {
   return Intl.NumberFormat("en-US").format(value);
 }
 
+function shortPath(value) {
+  if (!value || value === "(unknown)") {
+    return value ?? "(unknown)";
+  }
+
+  const home = os.homedir();
+  return value === home || value.startsWith(`${home}${path.sep}`)
+    ? `~${value.slice(home.length)}`
+    : value;
+}
+
+function truncate(value, width) {
+  const text = String(value);
+  if (text.length <= width) {
+    return text;
+  }
+
+  if (width <= 3) {
+    return text.slice(0, width);
+  }
+
+  return `${text.slice(0, width - 3)}...`;
+}
+
+function truncateMiddle(value, width) {
+  const text = String(value);
+  if (text.length <= width) {
+    return text;
+  }
+
+  if (width <= 3) {
+    return text.slice(0, width);
+  }
+
+  const head = Math.ceil((width - 3) / 2);
+  const tail = Math.floor((width - 3) / 2);
+  return `${text.slice(0, head)}...${text.slice(text.length - tail)}`;
+}
+
+function terminalWidth() {
+  return Math.min(Math.max(process.stdout.columns ?? 88, BOX_MIN_WIDTH), BOX_MAX_WIDTH);
+}
+
+function boxedLine(content, innerWidth) {
+  return `│ ${truncate(content, innerWidth).padEnd(innerWidth)} │`;
+}
+
+function boxedBlank(innerWidth) {
+  return boxedLine("", innerWidth);
+}
+
+function boxedTitle(title, innerWidth) {
+  const text = `─ ${title} `;
+  return `┌${text}${"─".repeat(Math.max(innerWidth + 2 - text.length, 0))}┐`;
+}
+
+function boxedFooter(innerWidth) {
+  return `└${"─".repeat(innerWidth + 2)}┘`;
+}
+
+function infoLine(labelText, value, innerWidth) {
+  const labelWidth = 12;
+  const valueWidth = innerWidth - labelWidth;
+  return boxedLine(`${labelText.padEnd(labelWidth)}${truncate(value, valueWidth)}`, innerWidth);
+}
+
+function bar(value, total, width = 16) {
+  if (total <= 0 || value <= 0) {
+    return "░".repeat(width);
+  }
+
+  const filled = Math.max(1, Math.round((value / total) * width));
+  return `${"█".repeat(Math.min(filled, width))}${"░".repeat(Math.max(width - filled, 0))}`;
+}
+
+function topLine(name, count, total, unit, innerWidth) {
+  const nameWidth = 24;
+  const countWidth = 13;
+  const barWidth = 16;
+  const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+  const left = `  ${truncateMiddle(name, nameWidth).padEnd(nameWidth)}`;
+  const middle = `${fmtInt(count)} ${unit}`.padStart(countWidth);
+  const right = `${bar(count, total, barWidth)} ${String(percent).padStart(3)}%`;
+  return boxedLine(`${left} ${middle}  ${right}`, innerWidth);
+}
+
 function sortedEntries(map) {
   return [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
-function printTop(title, map, limit) {
-  console.log(`\n${title}`);
+function topSection(lines, title, map, limit, unit, innerWidth) {
   const entries = sortedEntries(map);
+  lines.push(boxedLine(title, innerWidth));
   if (entries.length === 0) {
-    console.log("  none");
+    lines.push(boxedLine("  none", innerWidth));
     return;
   }
 
+  const total = entries.reduce((sum, [, count]) => sum + count, 0);
   for (const [name, count] of entries.slice(0, limit)) {
-    console.log(`  ${name}: ${fmtInt(count)}`);
+    lines.push(topLine(shortPath(name), count, total, unit, innerWidth));
   }
+}
+
+function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, providers, sources, models }) {
+  const width = terminalWidth();
+  const innerWidth = width - 4;
+  const totalMessages = (messages.get("user") ?? 0) + (messages.get("assistant") ?? 0);
+  const busiestDay = sortedEntries(daySessions)[0] ?? ["none", 0];
+  const firstDay = sessions.reduce((earliest, session) => (
+    earliest == null || session.firstTs < earliest ? session.firstTs : earliest
+  ), null) ?? end;
+  const scopeLabel = scope.type === "project"
+    ? `project ${shortPath(scope.root)}`
+    : scope.label;
+  const lines = [boxedTitle("codex-report", innerWidth)];
+
+  lines.push(infoLine("Scope", scopeLabel, innerWidth));
+  lines.push(infoLine("Period", `${localDay(start ?? firstDay)} → ${localDay(end)}`, innerWidth));
+  lines.push(infoLine("Sessions", fmtInt(sessions.length), innerWidth));
+  if (scope.type === "global") {
+    lines.push(infoLine("Projects", fmtInt(projects.size), innerWidth));
+  }
+  lines.push(infoLine("Messages", `${fmtInt(totalMessages)} (${fmtInt(messages.get("user") ?? 0)} user, ${fmtInt(messages.get("assistant") ?? 0)} assistant)`, innerWidth));
+  lines.push(infoLine("Tokens", `${fmtInt(tokens.total_tokens)} total`, innerWidth));
+  lines.push(infoLine("", `${fmtInt(tokens.input_tokens)} input · ${fmtInt(tokens.cached_input_tokens)} cached · ${fmtInt(tokens.output_tokens)} output`, innerWidth));
+  lines.push(infoLine("Active days", `${fmtInt(activeDays.size)} · longest streak ${fmtInt(longestStreak(activeDays))} days`, innerWidth));
+  lines.push(infoLine("Busiest day", `${busiestDay[0]} (${fmtInt(busiestDay[1])} sessions)`, innerWidth));
+  lines.push(boxedBlank(innerWidth));
+
+  if (scope.type === "global") {
+    topSection(lines, "Top projects", projects, args.top, "sessions", innerWidth);
+    lines.push(boxedBlank(innerWidth));
+  }
+
+  topSection(lines, "Top models", models, args.top, "turns", innerWidth);
+  lines.push(boxedBlank(innerWidth));
+  topSection(lines, "Top tools", tools, args.top, "calls", innerWidth);
+  lines.push(boxedBlank(innerWidth));
+  topSection(lines, "Activity by day", daySessions, args.top, "sessions", innerWidth);
+  lines.push(boxedBlank(innerWidth));
+  topSection(lines, "Sources", sources, Math.min(args.top, 3), "sessions", innerWidth);
+  lines.push(boxedBlank(innerWidth));
+  topSection(lines, "Providers", providers, Math.min(args.top, 3), "sessions", innerWidth);
+  lines.push(boxedFooter(innerWidth));
+
+  return lines.join("\n");
 }
 
 async function main() {
@@ -336,31 +470,22 @@ async function main() {
     increment(sources, session.source);
   }
 
-  const totalMessages = (messages.get("user") ?? 0) + (messages.get("assistant") ?? 0);
-  const busiestDay = sortedEntries(daySessions)[0] ?? ["none", 0];
-  const firstDay = sessions.reduce((earliest, session) => (
-    earliest == null || session.firstTs < earliest ? session.firstTs : earliest
-  ), null) ?? end;
-
-  console.log("Codex usage stats");
-  console.log(`Scope: ${scope.label}`);
-  console.log(`Period: ${localDay(start ?? firstDay)} to ${localDay(end)}`);
-  console.log(`Sessions: ${fmtInt(sessions.length)}`);
-  console.log(`Messages: ${fmtInt(totalMessages)} (${fmtInt(messages.get("user") ?? 0)} user, ${fmtInt(messages.get("assistant") ?? 0)} assistant)`);
-  console.log(`Tokens: ${fmtInt(tokens.total_tokens)} total`);
-  console.log(`  Input: ${fmtInt(tokens.input_tokens)}, cached input: ${fmtInt(tokens.cached_input_tokens)}`);
-  console.log(`  Output: ${fmtInt(tokens.output_tokens)}, reasoning output: ${fmtInt(tokens.reasoning_output_tokens)}`);
-  console.log(`Projects: ${fmtInt(projects.size)}`);
-  console.log(`Active days: ${fmtInt(activeDays.size)}`);
-  console.log(`Longest streak: ${fmtInt(longestStreak(activeDays))} days`);
-  console.log(`Busiest day: ${busiestDay[0]} (${fmtInt(busiestDay[1])} sessions)`);
-
-  printTop("Top projects", projects, args.top);
-  printTop("Top models", models, args.top);
-  printTop("Providers", providers, args.top);
-  printTop("Sources", sources, args.top);
-  printTop("Top tools", tools, args.top);
-  printTop("Activity by day", daySessions, args.top);
+  console.log(renderReport({
+    args,
+    scope,
+    start,
+    end,
+    sessions,
+    daySessions,
+    activeDays,
+    tokens,
+    messages,
+    tools,
+    projects,
+    providers,
+    sources,
+    models,
+  }));
 }
 
 main().catch((error) => {
