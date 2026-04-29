@@ -17,13 +17,22 @@ const TOKEN_KEYS = [
 const BOX_MIN_WIDTH = 76;
 const BOX_MAX_WIDTH = 110;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const SECTION_FLAGS = new Map([
+  ["--weekly", "weekly"],
+  ["--projects", "projects"],
+  ["--models", "models"],
+  ["--tools", "tools"],
+  ["--activity", "activity"],
+  ["--sources", "sources"],
+  ["--providers", "providers"],
+]);
 
 function usage() {
-  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10]");
+  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--weekly] [--projects] [--models] [--tools] [--activity] [--sources] [--providers]");
 }
 
 function parseArgs(argv) {
-  const args = { from: null, to: null, global: false, top: 10 };
+  const args = { from: null, to: null, global: false, top: 10, sections: [] };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -40,6 +49,11 @@ function parseArgs(argv) {
     } else if (arg === "--top") {
       args.top = Number.parseInt(next, 10);
       index += 1;
+    } else if (SECTION_FLAGS.has(arg)) {
+      const section = SECTION_FLAGS.get(arg);
+      if (!args.sections.includes(section)) {
+        args.sections.push(section);
+      }
     } else if (arg === "--help" || arg === "-h") {
       usage();
       process.exit(0);
@@ -434,6 +448,33 @@ function topSection(lines, title, map, limit, unit, innerWidth) {
   }
 }
 
+function plainTopLine(name, count, total, unit, nameWidth) {
+  const barWidth = 16;
+  const percentWidth = 4;
+  const countWidth = 16;
+  const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+  const displayName = name.includes("/") ? truncatePath(name, nameWidth) : truncateMiddle(name, nameWidth);
+  const middle = `${fmtInt(count)} ${unit}`.padStart(countWidth);
+  return `${displayName.padEnd(nameWidth)} ${middle}  ${bar(count, total, barWidth)} ${`${percent}%`.padStart(percentWidth)}`;
+}
+
+function plainTopSection(title, map, limit, unit, { emptyText = "none" } = {}) {
+  const entries = sortedEntries(map);
+  const lines = [title, ""];
+  if (entries.length === 0) {
+    lines.push(emptyText);
+    return lines;
+  }
+
+  const total = entries.reduce((sum, [, count]) => sum + count, 0);
+  const maxNameWidth = Math.max(12, terminalWidth() - 40);
+  const nameWidth = Math.min(maxNameWidth, Math.max(12, ...entries.slice(0, limit).map(([name]) => shortPath(name).length)));
+  for (const [name, count] of entries.slice(0, limit)) {
+    lines.push(plainTopLine(shortPath(name), count, total, unit, nameWidth));
+  }
+  return lines;
+}
+
 function activityLine(name, activity, totalMessages, innerWidth) {
   const barWidth = 16;
   const percentWidth = 4;
@@ -461,6 +502,33 @@ function activitySection(lines, title, map, limit, innerWidth) {
   for (const [name, activity] of entries.slice(0, limit)) {
     lines.push(activityLine(name, activity, totalMessages, innerWidth));
   }
+}
+
+function plainActivityLine(name, activity, totalMessages, nameWidth) {
+  const barWidth = 16;
+  const percentWidth = 4;
+  const detailWidth = 20;
+  const percent = totalMessages > 0 ? Math.round((activity.messages / totalMessages) * 100) : 0;
+  const detail = `${fmtCompact(activity.messages)} msg | ${fmtCompact(activity.tokens)} tok`;
+  const displayName = name.includes("/") ? truncatePath(name, nameWidth) : truncateMiddle(name, nameWidth);
+  return `${displayName.padEnd(nameWidth)} ${detail.padStart(detailWidth)}  ${bar(activity.messages, totalMessages, barWidth)} ${`${percent}%`.padStart(percentWidth)}`;
+}
+
+function plainActivitySection(title, map, limit) {
+  const entries = [...map.entries()].sort((a, b) => b[1].messages - a[1].messages || a[0].localeCompare(b[0]));
+  const lines = [title, ""];
+  if (entries.length === 0 || entries.every(([, activity]) => activity.messages === 0 && activity.tokens === 0)) {
+    lines.push("none");
+    return lines;
+  }
+
+  const totalMessages = entries.reduce((sum, [, activity]) => sum + activity.messages, 0);
+  const maxNameWidth = Math.max(12, terminalWidth() - 43);
+  const nameWidth = Math.min(maxNameWidth, Math.max(12, ...entries.slice(0, limit).map(([name]) => name.length)));
+  for (const [name, activity] of entries.slice(0, limit)) {
+    lines.push(plainActivityLine(name, activity, totalMessages, nameWidth));
+  }
+  return lines;
 }
 
 function weekdayIndex(date) {
@@ -496,6 +564,23 @@ function weeklyActivitySection(lines, sessions, innerWidth) {
     const line = `  ${day.padEnd(labelWidth)}${bar(activity.messages, maxMessages, barWidth)} ${truncate(detail, detailWidth).padStart(detailWidth)}`;
     lines.push(boxedLine(line, innerWidth));
   }
+}
+
+function plainWeeklyActivitySection(sessions) {
+  const counts = weeklyActivity(sessions);
+  const maxMessages = Math.max(...[...counts.values()].map((activity) => activity.messages), 0);
+  const lines = ["Weekly activity", ""];
+
+  if (maxMessages === 0 && [...counts.values()].every((activity) => activity.tokens === 0)) {
+    lines.push("none");
+    return lines;
+  }
+
+  for (const [day, activity] of counts) {
+    const detail = `${fmtInt(activity.messages)} messages | ${fmtCompact(activity.tokens)} tok`;
+    lines.push(`${day.padEnd(3)}  ${bar(activity.messages, maxMessages, 28)}  ${detail}`);
+  }
+  return lines;
 }
 
 function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, providers, sources, models }) {
@@ -545,6 +630,31 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   return lines.join("\n");
 }
 
+function renderPlainSections({ args, scope, sessions, daySessions, tools, projects, providers, sources, models }) {
+  const sections = [];
+  for (const section of args.sections) {
+    if (section === "weekly") {
+      sections.push(plainWeeklyActivitySection(sessions));
+    } else if (section === "projects") {
+      sections.push(scope.type === "global"
+        ? plainTopSection("Top projects", projects, args.top, "sessions")
+        : ["Top projects", "", "current project scope; use --global to compare projects"]);
+    } else if (section === "models") {
+      sections.push(plainTopSection("Top models", models, args.top, "turns"));
+    } else if (section === "tools") {
+      sections.push(plainTopSection("Top tools", tools, args.top, "calls"));
+    } else if (section === "activity") {
+      sections.push(plainActivitySection("Activity by day", daySessions, args.top));
+    } else if (section === "sources") {
+      sections.push(plainTopSection("Sources", sources, Math.min(args.top, 3), "sessions"));
+    } else if (section === "providers") {
+      sections.push(plainTopSection("Providers", providers, Math.min(args.top, 3), "sessions"));
+    }
+  }
+
+  return sections.map((lines) => lines.join("\n")).join("\n\n");
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const scope = resolveScope(args.global);
@@ -590,7 +700,7 @@ async function main() {
     increment(sources, session.source);
   }
 
-  console.log(renderReport({
+  const report = {
     args,
     scope,
     start,
@@ -605,7 +715,9 @@ async function main() {
     providers,
     sources,
     models,
-  }));
+  };
+
+  console.log(args.sections.length > 0 ? renderPlainSections(report) : renderReport(report));
 }
 
 main().catch((error) => {

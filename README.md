@@ -59,6 +59,17 @@ Limit top lists with `--top`:
 codex-report --top 5
 ```
 
+Print only selected sections without the boxed summary:
+
+```bash
+codex-report --models
+codex-report --models --tools
+codex-report --global --weekly --activity --top 5
+```
+
+Available section flags: `--weekly`, `--projects`, `--models`, `--tools`,
+`--activity`, `--sources`, and `--providers`.
+
 ## Example output
 
 ```text
