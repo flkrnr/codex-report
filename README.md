@@ -69,40 +69,49 @@ $ codex-report --global
 │ Period      2025-09-19 → 2026-04-29                                                  │
 │ Sessions    476                                                                      │
 │ Projects    13                                                                       │
-│ Messages    34,710 (8,019 user, 26,691 assistant)                                    │
-│ Tokens      7,895,483,615 total                                                      │
-│             7,828,901,338 input · 7,209,408,000 cached · 36,178,309 output           │
+│ Messages    34,740 (8,024 user, 26,716 assistant)                                    │
+│ Tokens      7,907,745,582 total                                                      │
+│             7,841,153,859 input · 7,221,436,800 cached · 36,187,755 output           │
 │ Active days 125 · longest streak 28 days                                             │
 │ Busiest day 2026-03-25 (2,373 messages)                                              │
 │                                                                                      │
 │ Weekly activity                                                                      │
 │   Mon  █████████████░░░░░░░░░░░░░░░    3,614 messages | 809M tok                     │
-│   Tue  ████████████████████████████    7,844 messages | 2.0B tok                     │
+│   Tue  ████████████████████████████    7,872 messages | 2.0B tok                     │
 │   Wed  ████████████████████████░░░░    6,623 messages | 1.3B tok                     │
-│   Thu  ██████████████████████░░░░░░    6,043 messages | 1.4B tok                     │
+│   Thu  █████████████████████░░░░░░░    6,043 messages | 1.4B tok                     │
 │   Fri  █████████████████░░░░░░░░░░░    4,828 messages | 1.1B tok                     │
 │   Sat  ███████░░░░░░░░░░░░░░░░░░░░░    1,905 messages | 427M tok                     │
 │   Sun  ██████████████░░░░░░░░░░░░░░    3,855 messages | 803M tok                     │
 │                                                                                      │
 │ Top projects                                                                         │
-│   /Users/flkrnr/code/product-api    205 sessions  ███████░░░░░░░░░  43%              │
-│   /Users/flkrnr/code/mobile-app     194 sessions  ███████░░░░░░░░░  41%              │
-│   /Users/flkrnr/code/design-system   39 sessions  █░░░░░░░░░░░░░░░   8%              │
+│   /Users/flkrnr/code/product-api              205 sessions  ███████░░░░░░░░░  43%    │
+│   /Users/flkrnr/code/mobile-app               194 sessions  ███████░░░░░░░░░  41%    │
+│   /Users/flkrnr/code/design-system             39 sessions  █░░░░░░░░░░░░░░░   8%    │
 │                                                                                      │
 │ Top models                                                                           │
-│   gpt-5.2-codex              6,689 turns  █████░░░░░░░░░░░  29%                      │
-│   gpt-5.4                    4,745 turns  ███░░░░░░░░░░░░░  20%                      │
-│   gpt-5.3-codex              3,909 turns  ███░░░░░░░░░░░░░  17%                      │
+│   gpt-5.2-codex                                 6,689 turns  █████░░░░░░░░░░░  29%   │
+│   gpt-5.4                                       4,745 turns  ███░░░░░░░░░░░░░  20%   │
+│   gpt-5.3-codex                                 3,909 turns  ███░░░░░░░░░░░░░  17%   │
 │                                                                                      │
 │ Top tools                                                                            │
-│   exec_command              46,294 calls  ██████████░░░░░░  63%                      │
-│   apply_patch                8,267 calls  ██░░░░░░░░░░░░░░  11%                      │
-│   write_stdin                7,603 calls  ██░░░░░░░░░░░░░░  10%                      │
+│   exec_command                                 46,384 calls  ██████████░░░░░░  63%   │
+│   apply_patch                                   8,287 calls  ██░░░░░░░░░░░░░░  11%   │
+│   write_stdin                                   7,649 calls  ██░░░░░░░░░░░░░░  10%   │
 │                                                                                      │
 │ Activity by day                                                                      │
 │   2026-03-25                              2.4K msg | 402M tok  █░░░░░░░░░░░░░░░   7% │
 │   2026-03-08                              2.3K msg | 380M tok  █░░░░░░░░░░░░░░░   7% │
 │   2026-03-14                              1.5K msg | 348M tok  █░░░░░░░░░░░░░░░   4% │
+│                                                                                      │
+│ Sources                                                                              │
+│   vscode                                       372 sessions  █████████████░░░  78%   │
+│   cli                                           81 sessions  ███░░░░░░░░░░░░░  17%   │
+│   codex_cli_rs                                  17 sessions  █░░░░░░░░░░░░░░░   4%   │
+│                                                                                      │
+│ Providers                                                                            │
+│   openai                                       454 sessions  ███████████████░  95%   │
+│   (unknown)                                     22 sessions  █░░░░░░░░░░░░░░░   5%   │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 

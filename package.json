@@ -1,6 +1,6 @@
 {
   "name": "codex-report",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "a tiny CLI that shows how much you're actually burning with Codex.",
   "type": "module",
   "homepage": "https://github.com/flkrnr/codex-report#readme",
