@@ -67,27 +67,27 @@ $ codex-report --global
 ┌─ codex-report ───────────────────────────────────────────────────────────────────────┐
 │ Scope       global                                                                   │
 │ Period      2025-09-19 → 2026-04-29                                                  │
-│ Sessions    3,355                                                                    │
+│ Sessions    476                                                                      │
 │ Projects    13                                                                       │
-│ Messages    34,655 (8,008 user, 26,647 assistant)                                    │
-│ Tokens      7,879,502,780 total                                                      │
-│             7,812,940,332 input · 7,193,757,440 cached · 36,158,480 output           │
-│ Active days 137 · longest streak 35 days                                             │
-│ Busiest day 2026-02-28 (563 sessions)                                                │
+│ Messages    34,710 (8,019 user, 26,691 assistant)                                    │
+│ Tokens      7,895,483,615 total                                                      │
+│             7,828,901,338 input · 7,209,408,000 cached · 36,178,309 output           │
+│ Active days 125 · longest streak 28 days                                             │
+│ Busiest day 2026-03-25 (2,373 messages)                                              │
 │                                                                                      │
 │ Weekly activity                                                                      │
-│   Mon  ██████████████████████████░░ 797 sessions                                     │
-│   Tue  ████████████░░░░░░░░░░░░░░░░ 358 sessions                                     │
-│   Wed  ████████░░░░░░░░░░░░░░░░░░░░ 242 sessions                                     │
-│   Thu  ████████░░░░░░░░░░░░░░░░░░░░ 230 sessions                                     │
-│   Fri  ███████░░░░░░░░░░░░░░░░░░░░░ 214 sessions                                     │
-│   Sat  ████████████████████████████ 858 sessions                                     │
-│   Sun  █████████████████████░░░░░░░ 656 sessions                                     │
+│   Mon  █████████████░░░░░░░░░░░░░░░    3,614 messages | 809M tok                     │
+│   Tue  ████████████████████████████    7,844 messages | 2.0B tok                     │
+│   Wed  ████████████████████████░░░░    6,623 messages | 1.3B tok                     │
+│   Thu  ██████████████████████░░░░░░    6,043 messages | 1.4B tok                     │
+│   Fri  █████████████████░░░░░░░░░░░    4,828 messages | 1.1B tok                     │
+│   Sat  ███████░░░░░░░░░░░░░░░░░░░░░    1,905 messages | 427M tok                     │
+│   Sun  ██████████████░░░░░░░░░░░░░░    3,855 messages | 803M tok                     │
 │                                                                                      │
 │ Top projects                                                                         │
-│   /Users/flkrnr/code/product-api  2,872 sessions  ██████████████░░  86%              │
-│   /Users/flkrnr/code/mobile-app     221 sessions  █░░░░░░░░░░░░░░░   7%              │
-│   /Users/flkrnr/code/design-system  198 sessions  █░░░░░░░░░░░░░░░   6%              │
+│   /Users/flkrnr/code/product-api    205 sessions  ███████░░░░░░░░░  43%              │
+│   /Users/flkrnr/code/mobile-app     194 sessions  ███████░░░░░░░░░  41%              │
+│   /Users/flkrnr/code/design-system   39 sessions  █░░░░░░░░░░░░░░░   8%              │
 │                                                                                      │
 │ Top models                                                                           │
 │   gpt-5.2-codex              6,689 turns  █████░░░░░░░░░░░  29%                      │
@@ -100,9 +100,9 @@ $ codex-report --global
 │   write_stdin                7,603 calls  ██░░░░░░░░░░░░░░  10%                      │
 │                                                                                      │
 │ Activity by day                                                                      │
-│   2026-02-28                563 sessions  ███░░░░░░░░░░░░░  17%                      │
-│   2026-02-16                552 sessions  ███░░░░░░░░░░░░░  16%                      │
-│   2026-02-15                377 sessions  ██░░░░░░░░░░░░░░  11%                      │
+│   2026-03-25                           ████████████████    2,373 messages | 402M tok │
+│   2026-03-08                           ███████████████░    2,280 messages | 380M tok │
+│   2026-03-14                           ██████████░░░░░░    1,503 messages | 348M tok │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 

@@ -151,6 +151,18 @@ function addTokens(total, usage) {
   }
 }
 
+function sessionMessageCount(session) {
+  return (session.messages.get("user") ?? 0) + (session.messages.get("assistant") ?? 0);
+}
+
+function sessionTokenCount(session) {
+  return session.tokens.total_tokens ?? 0;
+}
+
+function hasActivity(session) {
+  return sessionMessageCount(session) > 0 || sessionTokenCount(session) > 0;
+}
+
 async function sessionFiles(root) {
   if (!fs.existsSync(root)) {
     return [];
@@ -281,6 +293,20 @@ function fmtInt(value) {
   return Intl.NumberFormat("en-US").format(value);
 }
 
+function fmtCompact(value) {
+  const number = Number(value) || 0;
+  if (number >= 1_000_000_000) {
+    return `${(number / 1_000_000_000).toFixed(number >= 10_000_000_000 ? 0 : 1)}B`;
+  }
+  if (number >= 1_000_000) {
+    return `${(number / 1_000_000).toFixed(number >= 10_000_000 ? 0 : 1)}M`;
+  }
+  if (number >= 1_000) {
+    return `${(number / 1_000).toFixed(number >= 10_000 ? 0 : 1)}K`;
+  }
+  return fmtInt(number);
+}
+
 function shortPath(value) {
   if (!value || value === "(unknown)") {
     return value ?? "(unknown)";
@@ -408,34 +434,60 @@ function topSection(lines, title, map, limit, unit, innerWidth) {
   }
 }
 
+function activityLine(name, activity, maxMessages, innerWidth) {
+  const barWidth = 16;
+  const detailWidth = 28;
+  const nameWidth = Math.max(12, innerWidth - 2 - 1 - barWidth - 1 - detailWidth);
+  const detail = `${fmtInt(activity.messages)} messages | ${fmtCompact(activity.tokens)} tok`;
+  const displayName = name.includes("/") ? truncatePath(name, nameWidth) : truncateMiddle(name, nameWidth);
+  return boxedLine(`  ${displayName.padEnd(nameWidth)} ${bar(activity.messages, maxMessages, barWidth)} ${truncate(detail, detailWidth).padStart(detailWidth)}`, innerWidth);
+}
+
+function activitySection(lines, title, map, limit, innerWidth) {
+  const entries = [...map.entries()].sort((a, b) => b[1].messages - a[1].messages || a[0].localeCompare(b[0]));
+  lines.push(boxedLine(title, innerWidth));
+  if (entries.length === 0 || entries.every(([, activity]) => activity.messages === 0 && activity.tokens === 0)) {
+    lines.push(boxedLine("  none", innerWidth));
+    return;
+  }
+
+  const maxMessages = Math.max(...entries.map(([, activity]) => activity.messages), 0);
+  for (const [name, activity] of entries.slice(0, limit)) {
+    lines.push(activityLine(name, activity, maxMessages, innerWidth));
+  }
+}
+
 function weekdayIndex(date) {
   return (date.getDay() + 6) % 7;
 }
 
 function weeklyActivity(sessions) {
-  const counts = new Map(WEEKDAYS.map((day) => [day, 0]));
+  const counts = new Map(WEEKDAYS.map((day) => [day, { messages: 0, tokens: 0 }]));
   for (const session of sessions) {
     const day = WEEKDAYS[weekdayIndex(session.firstTs)];
-    increment(counts, day);
+    const activity = counts.get(day);
+    activity.messages += sessionMessageCount(session);
+    activity.tokens += sessionTokenCount(session);
   }
   return counts;
 }
 
 function weeklyActivitySection(lines, sessions, innerWidth) {
   const counts = weeklyActivity(sessions);
-  const maxCount = Math.max(...counts.values(), 0);
+  const maxMessages = Math.max(...[...counts.values()].map((activity) => activity.messages), 0);
   const labelWidth = 5;
-  const countWidth = 12;
-  const barWidth = Math.max(12, Math.min(28, innerWidth - 2 - labelWidth - 2 - countWidth));
+  const detailWidth = 28;
+  const barWidth = Math.max(12, Math.min(28, innerWidth - 2 - labelWidth - 1 - detailWidth));
 
   lines.push(boxedLine("Weekly activity", innerWidth));
-  if (maxCount === 0) {
+  if (maxMessages === 0 && [...counts.values()].every((activity) => activity.tokens === 0)) {
     lines.push(boxedLine("  none", innerWidth));
     return;
   }
 
-  for (const [day, count] of counts) {
-    const line = `  ${day.padEnd(labelWidth)}${bar(count, maxCount, barWidth)} ${`${fmtInt(count)} sessions`.padStart(countWidth)}`;
+  for (const [day, activity] of counts) {
+    const detail = `${fmtInt(activity.messages)} messages | ${fmtCompact(activity.tokens)} tok`;
+    const line = `  ${day.padEnd(labelWidth)}${bar(activity.messages, maxMessages, barWidth)} ${truncate(detail, detailWidth).padStart(detailWidth)}`;
     lines.push(boxedLine(line, innerWidth));
   }
 }
@@ -444,7 +496,7 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   const width = terminalWidth();
   const innerWidth = width - 4;
   const totalMessages = (messages.get("user") ?? 0) + (messages.get("assistant") ?? 0);
-  const busiestDay = sortedEntries(daySessions)[0] ?? ["none", 0];
+  const busiestDay = [...daySessions.entries()].sort((a, b) => b[1].messages - a[1].messages || a[0].localeCompare(b[0]))[0] ?? ["none", { messages: 0, tokens: 0 }];
   const firstDay = sessions.reduce((earliest, session) => (
     earliest == null || session.firstTs < earliest ? session.firstTs : earliest
   ), null) ?? end;
@@ -463,7 +515,7 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   lines.push(infoLine("Tokens", `${fmtInt(tokens.total_tokens)} total`, innerWidth));
   lines.push(infoLine("", `${fmtInt(tokens.input_tokens)} input · ${fmtInt(tokens.cached_input_tokens)} cached · ${fmtInt(tokens.output_tokens)} output`, innerWidth));
   lines.push(infoLine("Active days", `${fmtInt(activeDays.size)} · longest streak ${fmtInt(longestStreak(activeDays))} days`, innerWidth));
-  lines.push(infoLine("Busiest day", `${busiestDay[0]} (${fmtInt(busiestDay[1])} sessions)`, innerWidth));
+  lines.push(infoLine("Busiest day", `${busiestDay[0]} (${fmtInt(busiestDay[1].messages)} messages)`, innerWidth));
   lines.push(boxedBlank(innerWidth));
 
   weeklyActivitySection(lines, sessions, innerWidth);
@@ -477,7 +529,7 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   lines.push(boxedBlank(innerWidth));
   topSection(lines, "Top tools", tools, args.top, "calls", innerWidth);
   lines.push(boxedBlank(innerWidth));
-  topSection(lines, "Activity by day", daySessions, args.top, "sessions", innerWidth);
+  activitySection(lines, "Activity by day", daySessions, args.top, innerWidth);
   lines.push(boxedBlank(innerWidth));
   topSection(lines, "Sources", sources, Math.min(args.top, 3), "sessions", innerWidth);
   lines.push(boxedBlank(innerWidth));
@@ -497,7 +549,7 @@ async function main() {
 
   for (const file of files) {
     const session = await readSession(file, start, end);
-    if (session && (scope.type === "global" || isInsideProject(session.cwd, scope.root))) {
+    if (session && hasActivity(session) && (scope.type === "global" || isInsideProject(session.cwd, scope.root))) {
       sessions.push(session);
     }
   }
@@ -514,7 +566,11 @@ async function main() {
 
   for (const session of sessions) {
     const day = localDay(session.firstTs);
-    increment(daySessions, day);
+    if (!daySessions.has(day)) {
+      daySessions.set(day, { messages: 0, tokens: 0 });
+    }
+    daySessions.get(day).messages += sessionMessageCount(session);
+    daySessions.get(day).tokens += sessionTokenCount(session);
     activeDays.add(day);
 
     for (const key of TOKEN_KEYS) {
