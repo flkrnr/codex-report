@@ -3,7 +3,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
-import { execFileSync } from "node:child_process";
 
 const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
@@ -117,37 +116,20 @@ function label(value) {
   return JSON.stringify(value, Object.keys(value).sort());
 }
 
-function currentGitRoot() {
-  try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return null;
-  }
-}
-
 function resolveScope(forceGlobal) {
   if (forceGlobal) {
     return { type: "global", label: "global" };
   }
 
-  const root = currentGitRoot();
-  if (!root) {
-    return { type: "global", label: "global (not in a git project)" };
-  }
-
-  return { type: "project", root, label: `project ${root}` };
+  return { type: "folder", root: process.cwd(), label: `folder ${process.cwd()}` };
 }
 
-function isInsideProject(cwd, projectRoot) {
+function isInsideFolder(cwd, folderRoot) {
   if (cwd === "(unknown)") {
     return false;
   }
 
-  const relative = path.relative(projectRoot, cwd);
+  const relative = path.relative(folderRoot, cwd);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
@@ -272,7 +254,7 @@ async function readSession(filePath, start, end) {
     lastTs,
     cwd: label(meta.cwd),
     provider: label(meta.model_provider),
-    source: label(meta.source ?? meta.originator),
+    source: label(meta.originator ?? meta.source),
     messages,
     tools,
     tokens,
@@ -591,8 +573,8 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   const firstDay = sessions.reduce((earliest, session) => (
     earliest == null || session.firstTs < earliest ? session.firstTs : earliest
   ), null) ?? end;
-  const scopeLabel = scope.type === "project"
-    ? `project ${shortPath(scope.root)}`
+  const scopeLabel = scope.type === "folder"
+    ? `folder ${shortPath(scope.root)}`
     : scope.label;
   const lines = [boxedTitle("codex-report", innerWidth)];
 
@@ -638,7 +620,7 @@ function renderPlainSections({ args, scope, sessions, daySessions, tools, projec
     } else if (section === "projects") {
       sections.push(scope.type === "global"
         ? plainTopSection("Top projects", projects, args.top, "sessions")
-        : ["Top projects", "", "current project scope; use --global to compare projects"]);
+        : ["Top projects", "", "current folder scope; use --global to compare projects"]);
     } else if (section === "models") {
       sections.push(plainTopSection("Top models", models, args.top, "turns"));
     } else if (section === "tools") {
@@ -657,17 +639,37 @@ function renderPlainSections({ args, scope, sessions, daySessions, tools, projec
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const scope = resolveScope(args.global);
+  let scope = resolveScope(args.global);
   const start = parseDate(args.from);
   const end = parseDate(args.to ?? localDay(new Date()), { endOfDay: !args.to?.includes("T") });
   const files = await sessionFiles(SESSIONS_DIR);
-  const sessions = [];
+  const allSessions = [];
 
   for (const file of files) {
     const session = await readSession(file, start, end);
-    if (session && hasActivity(session) && (scope.type === "global" || isInsideProject(session.cwd, scope.root))) {
-      sessions.push(session);
+    if (session && hasActivity(session)) {
+      allSessions.push(session);
     }
+  }
+
+  const sessions = [];
+
+  if (scope.type === "folder") {
+    for (const session of allSessions) {
+      if (isInsideFolder(session.cwd, scope.root)) {
+        sessions.push(session);
+      }
+    }
+
+    if (sessions.length === 0) {
+      scope = {
+        type: "global",
+        label: `global (no sessions in folder ${shortPath(scope.root)})`,
+      };
+      sessions.push(...allSessions);
+    }
+  } else {
+    sessions.push(...allSessions);
   }
 
   const daySessions = new Map();

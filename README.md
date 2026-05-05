@@ -34,7 +34,7 @@ npm uninstall -g codex-report
 
 ## Usage
 
-Report the current git project from the beginning of the available local data
+Report the current folder from the beginning of the available local data
 through today:
 
 ```bash
@@ -116,9 +116,9 @@ $ codex-report --global
 │   2026-03-14                              1.5K msg | 348M tok █░░░░░░░░░░░░░░░   4%  │
 │                                                                                      │
 │ Sources                                                                              │
-│   vscode                                       372 sessions   █████████████░░░  78%  │
-│   cli                                           81 sessions   ███░░░░░░░░░░░░░  17%  │
-│   codex_cli_rs                                  17 sessions   █░░░░░░░░░░░░░░░   4%  │
+│   Codex Desktop                                326 sessions   ███████████░░░░░  67%  │
+│   codex_cli_rs                                 101 sessions   ███░░░░░░░░░░░░░  21%  │
+│   codex_vscode                                  54 sessions   ██░░░░░░░░░░░░░░  11%  │
 │                                                                                      │
 │ Providers                                                                            │
 │   openai                                       454 sessions   ███████████████░  95%  │
@@ -129,9 +129,10 @@ $ codex-report --global
 ## Notes
 
 - No external Node dependencies are required.
-- By default, the report is scoped to the current git project.
+- By default, the report is scoped to the current folder.
 - Use `--global` to report across all projects.
-- When run outside a git project, the CLI falls back to a global report.
+- When the current folder has no matching Codex sessions, the CLI falls back
+  to a global report.
 - Dates without times are interpreted in the local timezone.
 - Token totals are based on `last_token_usage` entries in Codex session logs.
 - Reports include all Codex sessions in the same local `~/.codex/sessions`
