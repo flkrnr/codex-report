@@ -755,21 +755,35 @@ function plainWeeklyActivitySection(sessions) {
   return lines;
 }
 
+function reportScopeLabel(scope) {
+  return scope.type === "folder"
+    ? `folder ${shortPath(scope.root)}`
+    : scope.label;
+}
+
+function reportPeriodLabel(start, end, sessions) {
+  const firstDay = sessions.reduce((earliest, session) => (
+    earliest == null || session.firstTs < earliest ? session.firstTs : earliest
+  ), null) ?? end;
+  return `${localDay(start ?? firstDay)} → ${localDay(end)}`;
+}
+
+function plainReportHeader({ scope, start, end, sessions }) {
+  return [
+    `Scope   ${reportScopeLabel(scope)}`,
+    `Period  ${reportPeriodLabel(start, end, sessions)}`,
+  ];
+}
+
 function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, providers, sources, models, costEstimate }) {
   const width = terminalWidth();
   const innerWidth = width - 4;
   const totalMessages = (messages.get("user") ?? 0) + (messages.get("assistant") ?? 0);
   const busiestDay = [...daySessions.entries()].sort((a, b) => b[1].messages - a[1].messages || a[0].localeCompare(b[0]))[0] ?? ["none", { messages: 0, tokens: 0 }];
-  const firstDay = sessions.reduce((earliest, session) => (
-    earliest == null || session.firstTs < earliest ? session.firstTs : earliest
-  ), null) ?? end;
-  const scopeLabel = scope.type === "folder"
-    ? `folder ${shortPath(scope.root)}`
-    : scope.label;
   const lines = [boxedTitle("codex-report", innerWidth)];
 
-  lines.push(infoLine("Scope", scopeLabel, innerWidth));
-  lines.push(infoLine("Period", `${localDay(start ?? firstDay)} → ${localDay(end)}`, innerWidth));
+  lines.push(infoLine("Scope", reportScopeLabel(scope), innerWidth));
+  lines.push(infoLine("Period", reportPeriodLabel(start, end, sessions), innerWidth));
   lines.push(infoLine("Sessions", fmtInt(sessions.length), innerWidth));
   if (scope.type === "global") {
     lines.push(infoLine("Projects", fmtInt(projects.size), innerWidth));
@@ -808,8 +822,8 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   return lines.join("\n");
 }
 
-function renderPlainSections({ args, scope, sessions, daySessions, tools, projects, providers, sources, models, costEstimate }) {
-  const sections = [];
+function renderPlainSections({ args, scope, start, end, sessions, daySessions, tools, projects, providers, sources, models, costEstimate }) {
+  const sections = [plainReportHeader({ scope, start, end, sessions })];
   for (const section of args.sections) {
     if (section === "weekly") {
       sections.push(plainWeeklyActivitySection(sessions));
