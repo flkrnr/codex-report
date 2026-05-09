@@ -72,6 +72,10 @@ codex-report --global --weekly --activity --top 5
 Available section flags: `--weekly`, `--projects`, `--models`, `--tools`,
 `--activity`, `--sources`, `--providers`, and `--costs`.
 
+API cost estimation is experimental and should be treated as an approximation,
+not billing data. For details on how estimates are calculated, see
+[Cost Estimation](docs/cost-estimation.md).
+
 ## Example output
 
 ```text
@@ -142,13 +146,15 @@ $ codex-report --global
 - When the current folder has no matching Codex sessions, the CLI falls back
   to a global report.
 - Dates without times are interpreted in the local timezone.
-- Token totals are based on `last_token_usage` entries in Codex session logs.
+- Token totals are based on Codex `token_count` events in local session logs.
 - API cost totals are estimates based on OpenAI standard text-token list
   prices for each recognized model. Cached input is billed at the cached-input
   rate, uncached input at the input rate, and output at the output rate.
 - Cost estimates are computed from local logs only. They are not an invoice,
   do not include non-token tool charges or regional/batch pricing differences,
-  and skip models without a known official API price.
+  skip models without a known official API price, and should be treated as an
+  experimental approximation. See
+  [Cost Estimation](docs/cost-estimation.md) for the exact calculation.
 - Reports include all Codex sessions in the same local `~/.codex/sessions`
   directory, even if they were created under different Codex logins.
 - Sessions from other OS users, machines, containers, or custom Codex home
