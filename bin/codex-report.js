@@ -270,11 +270,9 @@ async function readSession(filePath, start, end) {
     }
 
     const ts = parseTimestamp(event.timestamp);
-    if (ts && ((start && ts < start) || ts > end)) {
-      continue;
-    }
+    const inRange = !ts || !((start && ts < start) || ts > end);
 
-    if (ts) {
+    if (ts && inRange) {
       firstTs = firstTs == null || ts < firstTs ? ts : firstTs;
       lastTs = lastTs == null || ts > lastTs ? ts : lastTs;
     }
@@ -287,9 +285,21 @@ async function readSession(filePath, start, end) {
     } else if (eventType === "turn_context") {
       if (payload.model) {
         currentModel = payload.model;
-        increment(models, payload.model);
+        if (inRange) {
+          increment(models, payload.model);
+        }
       }
     } else if (eventType === "event_msg") {
+      if (!inRange) {
+        const totalUsage = payload.type === "token_count"
+          ? payload.info?.total_token_usage
+          : null;
+        if (totalUsage) {
+          previousTotalUsage = totalUsage;
+        }
+        continue;
+      }
+
       if (payload.type === "user_message") {
         increment(messages, "user");
       } else if (payload.type === "agent_message") {
@@ -311,7 +321,7 @@ async function readSession(filePath, start, end) {
           }
         }
       }
-    } else if (eventType === "response_item") {
+    } else if (inRange && eventType === "response_item") {
       if (payload.type === "function_call" || payload.type === "custom_tool_call") {
         increment(tools, payload.name ?? payload.type);
       }
