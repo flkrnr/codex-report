@@ -172,6 +172,22 @@ function addTokens(total, usage) {
   }
 }
 
+function tokenDelta(current, previous) {
+  if (!current) {
+    return null;
+  }
+
+  const delta = emptyTokens();
+  for (const key of TOKEN_KEYS) {
+    const diff = Number(current[key] ?? 0) - Number(previous?.[key] ?? 0);
+    if (diff < 0) {
+      return null;
+    }
+    delta[key] = diff;
+  }
+  return delta;
+}
+
 function addModelTokens(map, model, usage) {
   const key = model ?? "(unknown)";
   if (!map.has(key)) {
@@ -239,6 +255,7 @@ async function readSession(filePath, start, end) {
   const models = new Map();
   const modelTokens = new Map();
   let currentModel = null;
+  let previousTotalUsage = emptyTokens();
   let tokenEvents = 0;
 
   const stream = fs.createReadStream(filePath, { encoding: "utf8" });
@@ -278,11 +295,20 @@ async function readSession(filePath, start, end) {
       } else if (payload.type === "agent_message") {
         increment(messages, "assistant");
       } else if (payload.type === "token_count") {
-        const usage = payload.info?.last_token_usage;
+        const info = payload.info;
+        const totalUsage = info?.total_token_usage;
+        const usage = totalUsage
+          ? (tokenDelta(totalUsage, previousTotalUsage) ?? info?.last_token_usage)
+          : info?.last_token_usage;
+        if (totalUsage) {
+          previousTotalUsage = totalUsage;
+        }
         if (usage) {
           addTokens(tokens, usage);
           addModelTokens(modelTokens, currentModel, usage);
-          tokenEvents += 1;
+          if (tokenVolume(usage) > 0) {
+            tokenEvents += 1;
+          }
         }
       }
     } else if (eventType === "response_item") {
