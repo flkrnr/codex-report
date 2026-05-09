@@ -13,6 +13,26 @@ const TOKEN_KEYS = [
   "reasoning_output_tokens",
   "total_tokens",
 ];
+// Standard OpenAI API text-token list prices in USD per 1M tokens.
+// Sources: developers.openai.com model pages and openai.com/api/pricing, checked 2026-05-09.
+const MODEL_PRICES_USD_PER_1M = new Map([
+  ["gpt-5.5", { input: 5, cachedInput: 0.5, output: 30 }],
+  ["gpt-5.4", { input: 2.5, cachedInput: 0.25, output: 15 }],
+  ["gpt-5.4-mini", { input: 0.75, cachedInput: 0.075, output: 4.5 }],
+  ["gpt-5.4-nano", { input: 0.2, cachedInput: 0.02, output: 1.25 }],
+  ["gpt-5.3-codex", { input: 1.75, cachedInput: 0.175, output: 14 }],
+  ["gpt-5.2-codex", { input: 1.75, cachedInput: 0.175, output: 14 }],
+  ["gpt-5.2", { input: 1.75, cachedInput: 0.175, output: 14 }],
+  ["gpt-5.2-chat-latest", { input: 1.75, cachedInput: 0.175, output: 14 }],
+  ["gpt-5.1-codex-max", { input: 1.25, cachedInput: 0.125, output: 10 }],
+  ["gpt-5.1-codex", { input: 1.25, cachedInput: 0.125, output: 10 }],
+  ["gpt-5.1", { input: 1.25, cachedInput: 0.125, output: 10 }],
+  ["gpt-5-codex", { input: 1.25, cachedInput: 0.125, output: 10 }],
+  ["gpt-5", { input: 1.25, cachedInput: 0.125, output: 10 }],
+  ["gpt-5.1-codex-mini", { input: 0.25, cachedInput: 0.025, output: 2 }],
+  ["gpt-5-mini", { input: 0.25, cachedInput: 0.025, output: 2 }],
+  ["codex-mini-latest", { input: 1.5, cachedInput: 0.375, output: 6 }],
+]);
 const BOX_MIN_WIDTH = 76;
 const BOX_MAX_WIDTH = 110;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -24,10 +44,11 @@ const SECTION_FLAGS = new Map([
   ["--activity", "activity"],
   ["--sources", "sources"],
   ["--providers", "providers"],
+  ["--costs", "costs"],
 ]);
 
 function usage() {
-  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--weekly] [--projects] [--models] [--tools] [--activity] [--sources] [--providers]");
+  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--weekly] [--projects] [--models] [--tools] [--activity] [--sources] [--providers] [--costs]");
 }
 
 function parseArgs(argv) {
@@ -137,6 +158,10 @@ function increment(map, key, amount = 1) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
 
+function emptyTokens() {
+  return Object.fromEntries(TOKEN_KEYS.map((key) => [key, 0]));
+}
+
 function addTokens(total, usage) {
   if (!usage) {
     return;
@@ -145,6 +170,26 @@ function addTokens(total, usage) {
   for (const key of TOKEN_KEYS) {
     total[key] += Number(usage[key] ?? 0);
   }
+}
+
+function addModelTokens(map, model, usage) {
+  const key = model ?? "(unknown)";
+  if (!map.has(key)) {
+    map.set(key, emptyTokens());
+  }
+  addTokens(map.get(key), usage);
+}
+
+function mergeTokenMaps(target, source) {
+  for (const [key, usage] of source) {
+    addModelTokens(target, key, usage);
+  }
+}
+
+function tokenVolume(tokens) {
+  return tokens.total_tokens
+    || tokens.input_tokens + tokens.output_tokens
+    || 0;
 }
 
 function sessionMessageCount(session) {
@@ -190,8 +235,10 @@ async function readSession(filePath, start, end) {
   let lastTs = null;
   const messages = new Map();
   const tools = new Map();
-  const tokens = Object.fromEntries(TOKEN_KEYS.map((key) => [key, 0]));
+  const tokens = emptyTokens();
   const models = new Map();
+  const modelTokens = new Map();
+  let currentModel = null;
   let tokenEvents = 0;
 
   const stream = fs.createReadStream(filePath, { encoding: "utf8" });
@@ -222,6 +269,7 @@ async function readSession(filePath, start, end) {
       Object.assign(meta, payload);
     } else if (eventType === "turn_context") {
       if (payload.model) {
+        currentModel = payload.model;
         increment(models, payload.model);
       }
     } else if (eventType === "event_msg") {
@@ -233,6 +281,7 @@ async function readSession(filePath, start, end) {
         const usage = payload.info?.last_token_usage;
         if (usage) {
           addTokens(tokens, usage);
+          addModelTokens(modelTokens, currentModel, usage);
           tokenEvents += 1;
         }
       }
@@ -258,6 +307,7 @@ async function readSession(filePath, start, end) {
     messages,
     tools,
     tokens,
+    modelTokens,
     models,
     tokenEvents,
   };
@@ -301,6 +351,23 @@ function fmtCompact(value) {
     return `${(number / 1_000).toFixed(number >= 10_000 ? 0 : 1)}K`;
   }
   return fmtInt(number);
+}
+
+function fmtUSD(value) {
+  const number = Number(value) || 0;
+  if (number === 0) {
+    return "$0";
+  }
+  if (number >= 100) {
+    return `$${number.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  }
+  if (number >= 10) {
+    return `$${number.toFixed(2)}`;
+  }
+  if (number >= 1) {
+    return `$${number.toFixed(3)}`;
+  }
+  return `$${number.toFixed(4)}`;
 }
 
 function shortPath(value) {
@@ -428,6 +495,129 @@ function topSection(lines, title, map, limit, unit, innerWidth) {
   for (const [name, count] of entries.slice(0, limit)) {
     lines.push(topLine(shortPath(name), count, total, unit, innerWidth));
   }
+}
+
+function normalizeModelName(model) {
+  const normalized = String(model ?? "").trim().toLowerCase();
+  if (MODEL_PRICES_USD_PER_1M.has(normalized)) {
+    return normalized;
+  }
+
+  const withoutSnapshot = normalized.replace(/-\d{4}-\d{2}-\d{2}$/, "");
+  return MODEL_PRICES_USD_PER_1M.has(withoutSnapshot) ? withoutSnapshot : normalized;
+}
+
+function modelPrice(model) {
+  return MODEL_PRICES_USD_PER_1M.get(normalizeModelName(model));
+}
+
+function estimateCostForTokens(tokens, price) {
+  const cachedInput = Math.min(tokens.cached_input_tokens ?? 0, tokens.input_tokens ?? 0);
+  const uncachedInput = Math.max((tokens.input_tokens ?? 0) - cachedInput, 0);
+  const output = tokens.output_tokens ?? 0;
+
+  return (
+    (uncachedInput / 1_000_000) * price.input
+    + (cachedInput / 1_000_000) * price.cachedInput
+    + (output / 1_000_000) * price.output
+  );
+}
+
+function estimateCosts(modelTokens) {
+  const pricedTokens = emptyTokens();
+  const unpricedTokens = emptyTokens();
+  const modelCosts = [];
+  const unpricedModels = [];
+  let totalCost = 0;
+
+  for (const [model, tokens] of modelTokens) {
+    if (tokenVolume(tokens) === 0) {
+      continue;
+    }
+
+    const price = modelPrice(model);
+    if (!price) {
+      addTokens(unpricedTokens, tokens);
+      unpricedModels.push({ model, tokens });
+      continue;
+    }
+
+    const cost = estimateCostForTokens(tokens, price);
+    addTokens(pricedTokens, tokens);
+    totalCost += cost;
+    modelCosts.push({
+      model,
+      canonicalModel: normalizeModelName(model),
+      tokens,
+      cost,
+      price,
+    });
+  }
+
+  modelCosts.sort((a, b) => b.cost - a.cost || a.model.localeCompare(b.model));
+  unpricedModels.sort((a, b) => tokenVolume(b.tokens) - tokenVolume(a.tokens) || a.model.localeCompare(b.model));
+
+  return {
+    totalCost,
+    pricedTokens,
+    unpricedTokens,
+    modelCosts,
+    unpricedModels,
+  };
+}
+
+function costLine(entry, totalCost, innerWidth) {
+  const costWidth = 10;
+  const detailWidth = 34;
+  const percentWidth = 4;
+  const availableNameWidth = innerWidth - 2 - 1 - costWidth - 2 - detailWidth - 1 - percentWidth;
+  const nameWidth = Math.max(16, availableNameWidth);
+  const percent = totalCost > 0 ? Math.round((entry.cost / totalCost) * 100) : 0;
+  const detail = `${fmtCompact(entry.tokens.input_tokens)} in · ${fmtCompact(entry.tokens.cached_input_tokens)} cached · ${fmtCompact(entry.tokens.output_tokens)} out`;
+  const left = `  ${truncateMiddle(entry.model, nameWidth).padEnd(nameWidth)}`;
+  const middle = fmtUSD(entry.cost).padStart(costWidth);
+  const right = `${truncate(detail, detailWidth).padEnd(detailWidth)} ${`${percent}%`.padStart(percentWidth)}`;
+  return boxedLine(`${left} ${middle}  ${right}`, innerWidth);
+}
+
+function costSection(lines, title, estimate, limit, innerWidth) {
+  lines.push(boxedLine(title, innerWidth));
+  if (estimate.modelCosts.length === 0) {
+    lines.push(boxedLine("  none", innerWidth));
+    return;
+  }
+
+  for (const entry of estimate.modelCosts.slice(0, limit)) {
+    lines.push(costLine(entry, estimate.totalCost, innerWidth));
+  }
+
+  if (estimate.unpricedModels.length > 0) {
+    const unpriced = estimate.unpricedModels.slice(0, 3).map((entry) => entry.model).join(", ");
+    lines.push(boxedLine(`  unpriced: ${truncate(unpriced, Math.max(12, innerWidth - 12))}`, innerWidth));
+  }
+}
+
+function plainCostSection(estimate, limit) {
+  const lines = ["Estimated API cost by model", ""];
+  if (estimate.modelCosts.length === 0) {
+    lines.push("none");
+    return lines;
+  }
+
+  const modelWidth = Math.min(
+    Math.max(12, terminalWidth() - 57),
+    Math.max(12, ...estimate.modelCosts.slice(0, limit).map((entry) => entry.model.length)),
+  );
+  for (const entry of estimate.modelCosts.slice(0, limit)) {
+    const detail = `${fmtCompact(entry.tokens.input_tokens)} in · ${fmtCompact(entry.tokens.cached_input_tokens)} cached · ${fmtCompact(entry.tokens.output_tokens)} out`;
+    lines.push(`${truncateMiddle(entry.model, modelWidth).padEnd(modelWidth)} ${fmtUSD(entry.cost).padStart(10)}  ${detail}`);
+  }
+  lines.push("");
+  lines.push(`Total estimated API cost: ${fmtUSD(estimate.totalCost)}`);
+  if (estimate.unpricedModels.length > 0) {
+    lines.push(`Unpriced models: ${estimate.unpricedModels.map((entry) => entry.model).join(", ")}`);
+  }
+  return lines;
 }
 
 function plainTopLine(name, count, total, unit, nameWidth) {
@@ -565,7 +755,7 @@ function plainWeeklyActivitySection(sessions) {
   return lines;
 }
 
-function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, providers, sources, models }) {
+function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, providers, sources, models, costEstimate }) {
   const width = terminalWidth();
   const innerWidth = width - 4;
   const totalMessages = (messages.get("user") ?? 0) + (messages.get("assistant") ?? 0);
@@ -587,6 +777,10 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   lines.push(infoLine("Messages", `${fmtInt(totalMessages)} (${fmtInt(messages.get("user") ?? 0)} user, ${fmtInt(messages.get("assistant") ?? 0)} assistant)`, innerWidth));
   lines.push(infoLine("Tokens", `${fmtInt(tokens.total_tokens)} total`, innerWidth));
   lines.push(infoLine("", `${fmtInt(tokens.input_tokens)} input · ${fmtInt(tokens.cached_input_tokens)} cached · ${fmtInt(tokens.output_tokens)} output`, innerWidth));
+  lines.push(infoLine("API cost", `${fmtUSD(costEstimate.totalCost)} estimated from priced local tokens`, innerWidth));
+  if (tokenVolume(costEstimate.unpricedTokens) > 0) {
+    lines.push(infoLine("", `${fmtCompact(tokenVolume(costEstimate.unpricedTokens))} tokens in unpriced models`, innerWidth));
+  }
   lines.push(infoLine("Active days", `${fmtInt(activeDays.size)} · longest streak ${fmtInt(longestStreak(activeDays))} days`, innerWidth));
   lines.push(infoLine("Busiest day", `${busiestDay[0]} (${fmtInt(busiestDay[1].messages)} messages)`, innerWidth));
   lines.push(boxedBlank(innerWidth));
@@ -600,6 +794,8 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
 
   topSection(lines, "Top models", models, args.top, "turns", innerWidth);
   lines.push(boxedBlank(innerWidth));
+  costSection(lines, "Estimated API cost by model", costEstimate, args.top, innerWidth);
+  lines.push(boxedBlank(innerWidth));
   topSection(lines, "Top tools", tools, args.top, "calls", innerWidth);
   lines.push(boxedBlank(innerWidth));
   activitySection(lines, "Activity by day", daySessions, args.top, innerWidth);
@@ -612,7 +808,7 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   return lines.join("\n");
 }
 
-function renderPlainSections({ args, scope, sessions, daySessions, tools, projects, providers, sources, models }) {
+function renderPlainSections({ args, scope, sessions, daySessions, tools, projects, providers, sources, models, costEstimate }) {
   const sections = [];
   for (const section of args.sections) {
     if (section === "weekly") {
@@ -631,6 +827,8 @@ function renderPlainSections({ args, scope, sessions, daySessions, tools, projec
       sections.push(plainTopSection("Sources", sources, Math.min(args.top, 3), "sessions"));
     } else if (section === "providers") {
       sections.push(plainTopSection("Providers", providers, Math.min(args.top, 3), "sessions"));
+    } else if (section === "costs") {
+      sections.push(plainCostSection(costEstimate, args.top));
     }
   }
 
@@ -674,13 +872,14 @@ async function main() {
 
   const daySessions = new Map();
   const activeDays = new Set();
-  const tokens = Object.fromEntries(TOKEN_KEYS.map((key) => [key, 0]));
+  const tokens = emptyTokens();
   const messages = new Map();
   const tools = new Map();
   const projects = new Map();
   const providers = new Map();
   const sources = new Map();
   const models = new Map();
+  const modelTokens = new Map();
 
   for (const session of sessions) {
     const day = localDay(session.firstTs);
@@ -697,10 +896,13 @@ async function main() {
     for (const [key, value] of session.messages) increment(messages, key, value);
     for (const [key, value] of session.tools) increment(tools, key, value);
     for (const [key, value] of session.models) increment(models, key, value);
+    mergeTokenMaps(modelTokens, session.modelTokens);
     increment(projects, session.cwd);
     increment(providers, session.provider);
     increment(sources, session.source);
   }
+
+  const costEstimate = estimateCosts(modelTokens);
 
   const report = {
     args,
@@ -717,6 +919,8 @@ async function main() {
     providers,
     sources,
     models,
+    modelTokens,
+    costEstimate,
   };
 
   console.log(args.sections.length > 0 ? renderPlainSections(report) : renderReport(report));

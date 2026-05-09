@@ -3,7 +3,8 @@
 A tiny CLI that shows how much you're actually burning with Codex.
 
 The CLI reads Codex session JSONL files from `~/.codex/sessions` and prints
-session, message, token, model, project, tool, and activity stats.
+session, message, token, model, project, tool, activity, and estimated API
+cost stats.
 
 ## Quick start
 
@@ -64,11 +65,12 @@ Print only selected sections without the boxed summary:
 ```bash
 codex-report --models
 codex-report --models --tools
+codex-report --costs
 codex-report --global --weekly --activity --top 5
 ```
 
 Available section flags: `--weekly`, `--projects`, `--models`, `--tools`,
-`--activity`, `--sources`, and `--providers`.
+`--activity`, `--sources`, `--providers`, and `--costs`.
 
 ## Example output
 
@@ -83,6 +85,7 @@ $ codex-report --global
 │ Messages    34,740 (8,024 user, 26,716 assistant)                                    │
 │ Tokens      7,907,745,582 total                                                      │
 │             7,841,153,859 input · 7,221,436,800 cached · 36,187,755 output           │
+│ API cost    $335.91 estimated from priced local tokens                               │
 │ Active days 125 · longest streak 28 days                                             │
 │ Busiest day 2026-03-25 (2,373 messages)                                              │
 │                                                                                      │
@@ -104,6 +107,11 @@ $ codex-report --global
 │   gpt-5.2-codex                                 6,689 turns   █████░░░░░░░░░░░  29%  │
 │   gpt-5.4                                       4,745 turns   ███░░░░░░░░░░░░░  20%  │
 │   gpt-5.3-codex                                 3,909 turns   ███░░░░░░░░░░░░░  17%  │
+│                                                                                      │
+│ Estimated API cost by model                                                          │
+│   gpt-5.4                                           $160.25  2.1B in · 1.9B cached   │
+│   gpt-5.2-codex                                     $102.10  3.2B in · 3.0B cached   │
+│   gpt-5.3-codex                                      $73.56  1.1B in · 1.0B cached   │
 │                                                                                      │
 │ Top tools                                                                            │
 │   exec_command                                 46,384 calls   ██████████░░░░░░  63%  │
@@ -135,6 +143,12 @@ $ codex-report --global
   to a global report.
 - Dates without times are interpreted in the local timezone.
 - Token totals are based on `last_token_usage` entries in Codex session logs.
+- API cost totals are estimates based on OpenAI standard text-token list
+  prices for each recognized model. Cached input is billed at the cached-input
+  rate, uncached input at the input rate, and output at the output rate.
+- Cost estimates are computed from local logs only. They are not an invoice,
+  do not include non-token tool charges or regional/batch pricing differences,
+  and skip models without a known official API price.
 - Reports include all Codex sessions in the same local `~/.codex/sessions`
   directory, even if they were created under different Codex logins.
 - Sessions from other OS users, machines, containers, or custom Codex home
