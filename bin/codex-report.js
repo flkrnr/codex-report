@@ -6,6 +6,9 @@ import readline from "node:readline";
 
 const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
+const SKILL_MD = "SKILL.md";
+const SKILL_READ_COMMAND_RE = /(^|[;&|]\s*)(sed|cat|nl|wc|awk|head|tail)\b/;
+const SKILL_PATH_RE = /(?:~|\/Users\/[^\s'"`]+)[^\s'"`]*\/SKILL\.md/g;
 const TOKEN_KEYS = [
   "input_tokens",
   "cached_input_tokens",
@@ -45,10 +48,11 @@ const SECTION_FLAGS = new Map([
   ["--sources", "sources"],
   ["--providers", "providers"],
   ["--costs", "costs"],
+  ["--skills", "skills"],
 ]);
 
 function usage() {
-  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--weekly] [--projects] [--models] [--tools] [--activity] [--sources] [--providers] [--costs]");
+  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--weekly] [--projects] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--skills]");
 }
 
 function parseArgs(argv) {
@@ -245,7 +249,174 @@ async function sessionFiles(root) {
   return files.sort();
 }
 
-async function readSession(filePath, start, end) {
+async function namedFiles(root, fileName) {
+  if (!root || !fs.existsSync(root)) {
+    return [];
+  }
+
+  const files = [];
+  const stack = [root];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries;
+    try {
+      entries = await fs.promises.readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const entryPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (!entry.name.startsWith("plugin-backup-") && !entry.name.startsWith("plugin-install-")) {
+          stack.push(entryPath);
+        }
+      } else if (entry.isFile() && entry.name === fileName) {
+        files.push(entryPath);
+      }
+    }
+  }
+
+  return files.sort();
+}
+
+function parseSkillName(content, fallback) {
+  const match = /^name:\s*["']?([^"'\n]+)["']?\s*$/m.exec(content);
+  return match?.[1]?.trim() || fallback;
+}
+
+function skillInfoForPath(skillPath, content = "") {
+  const normalized = path.normalize(skillPath);
+  const parts = normalized.split(path.sep);
+  const fallbackName = path.basename(path.dirname(normalized));
+  const name = parseSkillName(content, fallbackName);
+  const home = os.homedir();
+  const systemRoot = path.join(home, ".codex", "skills", ".system");
+  const codexSkillsRoot = path.join(home, ".codex", "skills");
+  const agentsSkillsRoot = path.join(home, ".agents", "skills");
+  const cacheIndex = parts.lastIndexOf("cache");
+  const skillsIndex = parts.lastIndexOf("skills");
+
+  if (normalized === systemRoot || normalized.startsWith(`${systemRoot}${path.sep}`)) {
+    return { name, scope: "system", path: normalized };
+  }
+
+  if (cacheIndex >= 0 && skillsIndex > cacheIndex && parts[cacheIndex - 1] === "plugins") {
+    const pluginName = parts[cacheIndex + 2] || "app";
+    const displayName = name.includes(":") ? name : `${pluginName}:${name}`;
+    return { name: displayName, scope: "app", path: normalized };
+  }
+
+  if (normalized === codexSkillsRoot || normalized.startsWith(`${codexSkillsRoot}${path.sep}`)) {
+    return { name, scope: "personal", path: normalized };
+  }
+
+  if (normalized === agentsSkillsRoot || normalized.startsWith(`${agentsSkillsRoot}${path.sep}`)) {
+    return { name, scope: "personal", path: normalized };
+  }
+
+  if (normalized.includes(`${path.sep}.agents${path.sep}skills${path.sep}`)) {
+    return { name, scope: "repo", path: normalized };
+  }
+
+  return { name, scope: "unknown", path: normalized };
+}
+
+async function discoverSkills(scope) {
+  const roots = [
+    path.join(os.homedir(), ".codex", "skills"),
+    path.join(os.homedir(), ".agents", "skills"),
+    path.join(os.homedir(), ".codex", "plugins", "cache"),
+  ];
+
+  if (scope.type === "folder") {
+    roots.push(path.join(scope.root, ".agents", "skills"));
+  }
+
+  const byPath = new Map();
+  const byName = new Map();
+
+  for (const root of roots) {
+    for (const skillPath of await namedFiles(root, SKILL_MD)) {
+      let content = "";
+      try {
+        content = await fs.promises.readFile(skillPath, "utf8");
+      } catch {
+        // Keep the fallback folder-name metadata when a skill file cannot be read.
+      }
+      const info = skillInfoForPath(skillPath, content);
+      byPath.set(info.path, info);
+      if (!byName.has(info.name)) {
+        byName.set(info.name, { ...info, paths: [] });
+      }
+      byName.get(info.name).paths.push(info.path);
+    }
+  }
+
+  return { byPath, byName };
+}
+
+function emptySkillEvidence() {
+  return {
+    reads: new Map(),
+    mentions: new Map(),
+  };
+}
+
+function normalizeSkillPath(value) {
+  const withoutTrailingPunctuation = String(value).replace(/[),.;:]+$/, "");
+  const expanded = withoutTrailingPunctuation.startsWith("~/")
+    ? path.join(os.homedir(), withoutTrailingPunctuation.slice(2))
+    : withoutTrailingPunctuation;
+  return path.normalize(expanded);
+}
+
+function parseFunctionArguments(value) {
+  if (typeof value !== "string") {
+    return value && typeof value === "object" ? value : {};
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+function skillReadPathsFromCommand(command) {
+  if (!command || !SKILL_READ_COMMAND_RE.test(command)) {
+    return [];
+  }
+
+  return [...String(command).matchAll(SKILL_PATH_RE)]
+    .map((match) => normalizeSkillPath(match[0]));
+}
+
+function recordSkillRead(evidence, skillRegistry, skillPath) {
+  const info = skillRegistry?.byPath.get(skillPath) ?? skillInfoForPath(skillPath);
+  increment(evidence.reads, info.name);
+}
+
+function recordSkillMentions(evidence, skillRegistry, message) {
+  if (!message || !skillRegistry) {
+    return;
+  }
+
+  const mentioned = new Set();
+  for (const match of String(message).matchAll(/\$([A-Za-z0-9][A-Za-z0-9:_-]*)/g)) {
+    const name = match[1];
+    if (skillRegistry.byName.has(name)) {
+      mentioned.add(name);
+    }
+  }
+
+  for (const name of mentioned) {
+    increment(evidence.mentions, name);
+  }
+}
+
+async function readSession(filePath, start, end, skillRegistry = null) {
   const meta = {};
   let firstTs = null;
   let lastTs = null;
@@ -254,6 +425,7 @@ async function readSession(filePath, start, end) {
   const tokens = emptyTokens();
   const models = new Map();
   const modelTokens = new Map();
+  const skillEvidence = emptySkillEvidence();
   let currentModel = null;
   let previousTotalUsage = emptyTokens();
   let tokenEvents = 0;
@@ -302,6 +474,7 @@ async function readSession(filePath, start, end) {
 
       if (payload.type === "user_message") {
         increment(messages, "user");
+        recordSkillMentions(skillEvidence, skillRegistry, payload.message);
       } else if (payload.type === "agent_message") {
         increment(messages, "assistant");
       } else if (payload.type === "token_count") {
@@ -324,6 +497,10 @@ async function readSession(filePath, start, end) {
     } else if (inRange && eventType === "response_item") {
       if (payload.type === "function_call" || payload.type === "custom_tool_call") {
         increment(tools, payload.name ?? payload.type);
+        const args = parseFunctionArguments(payload.arguments);
+        for (const skillPath of skillReadPathsFromCommand(args.cmd ?? args.command ?? "")) {
+          recordSkillRead(skillEvidence, skillRegistry, skillPath);
+        }
       }
     }
   }
@@ -345,6 +522,7 @@ async function readSession(filePath, start, end) {
     tokens,
     modelTokens,
     models,
+    skillEvidence,
     tokenEvents,
   };
 }
@@ -533,6 +711,71 @@ function topSection(lines, title, map, limit, unit, innerWidth) {
   }
 }
 
+function mergeSkillEvidence(target, source) {
+  for (const [name, count] of source.reads ?? []) {
+    increment(target.reads, name, count);
+  }
+  for (const [name, count] of source.mentions ?? []) {
+    increment(target.mentions, name, count);
+  }
+}
+
+function aggregateSkills(sessions, skillRegistry) {
+  const evidence = emptySkillEvidence();
+  const readSessions = new Map();
+  const mentionSessions = new Map();
+
+  for (const session of sessions) {
+    mergeSkillEvidence(evidence, session.skillEvidence ?? emptySkillEvidence());
+    for (const name of session.skillEvidence?.reads?.keys() ?? []) {
+      increment(readSessions, name);
+    }
+    for (const name of session.skillEvidence?.mentions?.keys() ?? []) {
+      increment(mentionSessions, name);
+    }
+  }
+
+  const evidenceNames = new Set([
+    ...evidence.reads.keys(),
+    ...evidence.mentions.keys(),
+  ]);
+  const activeSkills = [...(skillRegistry?.byName.values() ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  const noEvidence = activeSkills
+    .filter((skill) => !evidenceNames.has(skill.name))
+    .map((skill) => skill.name);
+  const byScope = new Map();
+
+  for (const skill of activeSkills) {
+    if (!byScope.has(skill.scope)) {
+      byScope.set(skill.scope, { active: 0, evidence: 0 });
+    }
+    const row = byScope.get(skill.scope);
+    row.active += 1;
+    if (evidenceNames.has(skill.name)) {
+      row.evidence += 1;
+    }
+  }
+
+  const topReads = sortedEntries(evidence.reads).map(([name, reads]) => ({
+    name,
+    reads,
+    readSessions: readSessions.get(name) ?? 0,
+    mentions: evidence.mentions.get(name) ?? 0,
+    mentionSessions: mentionSessions.get(name) ?? 0,
+  }));
+
+  return {
+    activeSkills,
+    evidence,
+    evidenceNames,
+    noEvidence,
+    byScope,
+    topReads,
+    readSessions,
+    mentionSessions,
+  };
+}
+
 function normalizeModelName(model) {
   const normalized = String(model ?? "").trim().toLowerCase();
   if (MODEL_PRICES_USD_PER_1M.has(normalized)) {
@@ -653,6 +896,70 @@ function plainCostSection(estimate, limit) {
   if (estimate.unpricedModels.length > 0) {
     lines.push(`Unpriced models: ${estimate.unpricedModels.map((entry) => entry.model).join(", ")}`);
   }
+  return lines;
+}
+
+function plainSkillsSection(analysis, limit) {
+  const lines = [
+    "Skills",
+    "",
+    `Active skills        ${fmtInt(analysis.activeSkills.length)}`,
+    `With evidence        ${fmtInt(analysis.evidenceNames.size)}`,
+    `SKILL.md reads       ${fmtInt(analysis.evidence.reads.size)}`,
+    `$skill mentions     ${fmtInt(analysis.evidence.mentions.size)}`,
+    `No evidence          ${fmtInt(analysis.noEvidence.length)}`,
+    "",
+    "Top skills by SKILL.md reads",
+    "",
+  ];
+
+  if (analysis.topReads.length === 0) {
+    lines.push("none");
+  } else {
+    const totalReads = analysis.topReads.reduce((sum, entry) => sum + entry.reads, 0);
+    const nameWidth = Math.min(
+      Math.max(18, terminalWidth() - 50),
+      Math.max(18, ...analysis.topReads.slice(0, limit).map((entry) => entry.name.length)),
+    );
+    for (const entry of analysis.topReads.slice(0, limit)) {
+      const reads = `${fmtInt(entry.reads)} reads`.padStart(10);
+      const sessions = `${fmtInt(entry.readSessions)} sessions`.padStart(12);
+      const percent = totalReads > 0 ? Math.round((entry.reads / totalReads) * 100) : 0;
+      lines.push(`${truncateMiddle(entry.name, nameWidth).padEnd(nameWidth)} ${reads} ${sessions}  ${bar(entry.reads, totalReads, 16)} ${`${percent}%`.padStart(4)}`);
+    }
+  }
+
+  lines.push("");
+  lines.push("Active skills by scope");
+  lines.push("");
+
+  const scopeOrder = ["personal", "app", "system", "repo", "unknown"];
+  const totalActive = analysis.activeSkills.length;
+  for (const scope of scopeOrder) {
+    const row = analysis.byScope.get(scope);
+    if (!row) {
+      continue;
+    }
+    const labelText = scope === "repo" ? "repo-specific" : scope;
+    const detail = `${fmtInt(row.evidence)}/${fmtInt(row.active)} with evidence`.padStart(24);
+    const percent = totalActive > 0 ? Math.round((row.active / totalActive) * 100) : 0;
+    lines.push(`${labelText.padEnd(14)} ${detail}  ${bar(row.active, totalActive, 16)} ${`${percent}%`.padStart(4)}`);
+  }
+
+  if (analysis.noEvidence.length > 0) {
+    lines.push("");
+    lines.push("No evidence");
+    lines.push("");
+    for (const name of analysis.noEvidence.slice(0, limit)) {
+      lines.push(name);
+    }
+    if (analysis.noEvidence.length > limit) {
+      lines.push(`... ${fmtInt(analysis.noEvidence.length - limit)} more`);
+    }
+  }
+
+  lines.push("");
+  lines.push("Best-effort from transcript evidence; SKILL.md reads are stronger than $skill mentions.");
   return lines;
 }
 
@@ -858,7 +1165,7 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   return lines.join("\n");
 }
 
-function renderPlainSections({ args, scope, start, end, sessions, daySessions, tools, projects, providers, sources, models, costEstimate }) {
+function renderPlainSections({ args, scope, start, end, sessions, daySessions, tools, projects, providers, sources, models, costEstimate, skillAnalysis }) {
   const sections = [plainReportHeader({ scope, start, end, sessions })];
   for (const section of args.sections) {
     if (section === "weekly") {
@@ -879,6 +1186,8 @@ function renderPlainSections({ args, scope, start, end, sessions, daySessions, t
       sections.push(plainTopSection("Providers", providers, Math.min(args.top, 3), "sessions"));
     } else if (section === "costs") {
       sections.push(plainCostSection(costEstimate, args.top));
+    } else if (section === "skills") {
+      sections.push(plainSkillsSection(skillAnalysis, args.top));
     }
   }
 
@@ -890,11 +1199,13 @@ async function main() {
   let scope = resolveScope(args.global);
   const start = parseDate(args.from);
   const end = parseDate(args.to ?? localDay(new Date()), { endOfDay: !args.to?.includes("T") });
+  const wantsSkills = args.sections.includes("skills");
+  const skillRegistry = wantsSkills ? await discoverSkills(scope) : null;
   const files = await sessionFiles(SESSIONS_DIR);
   const allSessions = [];
 
   for (const file of files) {
-    const session = await readSession(file, start, end);
+    const session = await readSession(file, start, end, skillRegistry);
     if (session && hasActivity(session)) {
       allSessions.push(session);
     }
@@ -953,6 +1264,9 @@ async function main() {
   }
 
   const costEstimate = estimateCosts(modelTokens);
+  const skillAnalysis = wantsSkills
+    ? aggregateSkills(sessions, skillRegistry)
+    : aggregateSkills([], { byName: new Map() });
 
   const report = {
     args,
@@ -971,6 +1285,7 @@ async function main() {
     models,
     modelTokens,
     costEstimate,
+    skillAnalysis,
   };
 
   console.log(args.sections.length > 0 ? renderPlainSections(report) : renderReport(report));

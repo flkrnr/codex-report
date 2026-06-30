@@ -66,11 +66,12 @@ Print only selected sections without the boxed summary:
 codex-report --models
 codex-report --models --tools
 codex-report --costs
+codex-report --skills
 codex-report --global --weekly --activity --top 5
 ```
 
 Available section flags: `--weekly`, `--projects`, `--models`, `--tools`,
-`--activity`, `--sources`, `--providers`, and `--costs`.
+`--activity`, `--sources`, `--providers`, `--costs`, and `--skills`.
 
 API cost estimation is experimental and should be treated as an approximation,
 not billing data. For details on how estimates are calculated, see
@@ -155,6 +156,9 @@ $ codex-report --global
   skip models without a known official API price, and should be treated as an
   experimental approximation. See
   [Cost Estimation](docs/cost-estimation.md) for the exact calculation.
+- Skill usage is best-effort transcript evidence. Concrete `SKILL.md` reads are
+  stronger evidence than explicit `$skill` mentions, and system skill catalogs
+  are ignored to avoid false positives.
 - Reports include all Codex sessions in the same local `~/.codex/sessions`
   directory, even if they were created under different Codex logins.
 - Sessions from other OS users, machines, containers, or custom Codex home
