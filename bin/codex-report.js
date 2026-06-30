@@ -3,9 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
+import { createHash } from "node:crypto";
 
 const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
+const SESSION_CACHE_VERSION = 2;
+const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v2.json");
 const SKILL_MD = "SKILL.md";
 const SKILL_READ_COMMAND_RE = /(^|[;&|]\s*)(sed|cat|nl|wc|awk|head|tail)\b/;
 const SKILL_PATH_RE = /(?:~|\/Users\/[^\s'"`]+)[^\s'"`]*\/SKILL\.md/g;
@@ -52,11 +55,11 @@ const SECTION_FLAGS = new Map([
 ]);
 
 function usage() {
-  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--weekly] [--projects] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--skills]");
+  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--no-cache] [--weekly] [--projects] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--skills]");
 }
 
 function parseArgs(argv) {
-  const args = { from: null, to: null, global: false, top: 10, sections: [] };
+  const args = { from: null, to: null, global: false, top: 10, cache: true, sections: [] };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -73,6 +76,8 @@ function parseArgs(argv) {
     } else if (arg === "--top") {
       args.top = Number.parseInt(next, 10);
       index += 1;
+    } else if (arg === "--no-cache") {
+      args.cache = false;
     } else if (SECTION_FLAGS.has(arg)) {
       const section = SECTION_FLAGS.get(arg);
       if (!args.sections.includes(section)) {
@@ -139,6 +144,10 @@ function label(value) {
     return String(value);
   }
   return JSON.stringify(value, Object.keys(value).sort());
+}
+
+function hashText(value) {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }
 
 function resolveScope(forceGlobal) {
@@ -222,6 +231,76 @@ function sessionTokenCount(session) {
 
 function hasActivity(session) {
   return sessionMessageCount(session) > 0 || sessionTokenCount(session) > 0;
+}
+
+function mapEntries(map) {
+  return [...(map ?? new Map()).entries()];
+}
+
+function mapFromEntries(entries) {
+  return new Map(entries ?? []);
+}
+
+function serializeSession(session) {
+  return {
+    ...session,
+    firstTs: session.firstTs.toISOString(),
+    lastTs: session.lastTs?.toISOString() ?? null,
+    messages: mapEntries(session.messages),
+    tools: mapEntries(session.tools),
+    modelTokens: mapEntries(session.modelTokens),
+    models: mapEntries(session.models),
+    skillEvidence: {
+      reads: mapEntries(session.skillEvidence?.reads),
+      mentions: mapEntries(session.skillEvidence?.mentions),
+    },
+  };
+}
+
+function deserializeSession(value) {
+  return {
+    ...value,
+    firstTs: new Date(value.firstTs),
+    lastTs: value.lastTs ? new Date(value.lastTs) : null,
+    messages: mapFromEntries(value.messages),
+    tools: mapFromEntries(value.tools),
+    modelTokens: mapFromEntries(value.modelTokens),
+    models: mapFromEntries(value.models),
+    skillEvidence: {
+      reads: mapFromEntries(value.skillEvidence?.reads),
+      mentions: mapFromEntries(value.skillEvidence?.mentions),
+    },
+  };
+}
+
+async function readSessionCache() {
+  try {
+    const cache = JSON.parse(await fs.promises.readFile(SESSION_CACHE_PATH, "utf8"));
+    if (cache.version === SESSION_CACHE_VERSION && cache.entries && typeof cache.entries === "object") {
+      return cache;
+    }
+  } catch {
+    // Missing or invalid cache files are expected on first run.
+  }
+  return { version: SESSION_CACHE_VERSION, entries: {} };
+}
+
+async function writeSessionCache(cache) {
+  try {
+    await fs.promises.mkdir(path.dirname(SESSION_CACHE_PATH), { recursive: true });
+    await fs.promises.writeFile(SESSION_CACHE_PATH, `${JSON.stringify(cache)}\n`);
+  } catch {
+    // Cache writes are a performance optimization; reporting should still work.
+  }
+}
+
+function cacheRangeKey(start, end, skillRegistry) {
+  const skillKey = skillRegistry?.cacheKey ?? "none";
+  return `${start?.toISOString() ?? ""}|${end.toISOString()}|skills:${skillKey}`;
+}
+
+function cacheEntryKey(filePath, rangeKey) {
+  return `${filePath}\u0000${rangeKey}`;
 }
 
 async function sessionFiles(root) {
@@ -354,7 +433,8 @@ async function discoverSkills(scope) {
     }
   }
 
-  return { byPath, byName };
+  const cacheKey = hashText([...byPath.keys()].sort().join("\n"));
+  return { byPath, byName, cacheKey };
 }
 
 function emptySkillEvidence() {
@@ -525,6 +605,64 @@ async function readSession(filePath, start, end, skillRegistry = null) {
     skillEvidence,
     tokenEvents,
   };
+}
+
+async function readSessions(files, start, end, skillRegistry, useCache) {
+  if (!useCache) {
+    const sessions = [];
+    for (const file of files) {
+      const session = await readSession(file, start, end, skillRegistry);
+      if (session) {
+        sessions.push(session);
+      }
+    }
+    return sessions;
+  }
+
+  const cache = await readSessionCache();
+  const sessions = [];
+  const rangeKey = cacheRangeKey(start, end, skillRegistry);
+  let changed = false;
+
+  for (const file of files) {
+    let stat;
+    try {
+      stat = await fs.promises.stat(file);
+    } catch {
+      continue;
+    }
+
+    const key = cacheEntryKey(file, rangeKey);
+    const cached = cache.entries[key];
+    if (
+      cached
+      && cached.mtimeMs === stat.mtimeMs
+      && cached.size === stat.size
+      && Object.hasOwn(cached, "session")
+    ) {
+      if (cached.session) {
+        sessions.push(deserializeSession(cached.session));
+      }
+      continue;
+    }
+
+    const session = await readSession(file, start, end, skillRegistry);
+    cache.entries[key] = {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      session: session ? serializeSession(session) : null,
+    };
+    changed = true;
+    if (session) {
+      sessions.push(session);
+    }
+  }
+
+  if (changed) {
+    await writeSessionCache(cache);
+  }
+
+  return sessions;
 }
 
 function longestStreak(days) {
@@ -1202,14 +1340,8 @@ async function main() {
   const wantsSkills = args.sections.includes("skills");
   const skillRegistry = wantsSkills ? await discoverSkills(scope) : null;
   const files = await sessionFiles(SESSIONS_DIR);
-  const allSessions = [];
-
-  for (const file of files) {
-    const session = await readSession(file, start, end, skillRegistry);
-    if (session && hasActivity(session)) {
-      allSessions.push(session);
-    }
-  }
+  const allSessions = (await readSessions(files, start, end, skillRegistry, args.cache))
+    .filter((session) => hasActivity(session));
 
   const sessions = [];
 

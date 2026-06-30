@@ -60,6 +60,12 @@ Limit top lists with `--top`:
 codex-report --top 5
 ```
 
+Bypass the local parsed-session cache:
+
+```bash
+codex-report --no-cache
+```
+
 Print only selected sections without the boxed summary:
 
 ```bash
@@ -147,6 +153,8 @@ $ codex-report --global
 - When the current folder has no matching Codex sessions, the CLI falls back
   to a global report.
 - Dates without times are interpreted in the local timezone.
+- Parsed session summaries are cached under `~/.codex/cache` by default and
+  invalidated when the source JSONL file, date range, or skill registry changes.
 - Token totals are based on Codex `token_count` events in local session logs.
 - API cost totals are estimates based on OpenAI standard text-token list
   prices for each recognized model. Cached input is billed at the cached-input
