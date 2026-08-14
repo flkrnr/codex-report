@@ -3,15 +3,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
-import { createHash } from "node:crypto";
 
 const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
-const SESSION_CACHE_VERSION = 2;
-const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v2.json");
+const SESSION_CACHE_VERSION = 5;
+const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v5.json");
 const SKILL_MD = "SKILL.md";
-const SKILL_READ_COMMAND_RE = /(^|[;&|]\s*)(sed|cat|nl|wc|awk|head|tail)\b/;
-const SKILL_PATH_RE = /(?:~|\/Users\/[^\s'"`]+)[^\s'"`]*\/SKILL\.md/g;
+const SKILL_READ_COMMAND_RE = /(^|[;&|]\s*|["']\s*)\s*(?:[^\s"';&|]+[\\/])?(sed|cat|nl|wc|awk|head|tail)\b/;
+const SKILL_PATH_RE = /((?:~[\\/]|[A-Za-z]:[\\/]|\/)[^\n\r'"`]*?[\\/]SKILL\.md)/g;
 const TOKEN_KEYS = [
   "input_tokens",
   "cached_input_tokens",
@@ -146,10 +145,6 @@ function label(value) {
   return JSON.stringify(value, Object.keys(value).sort());
 }
 
-function hashText(value) {
-  return createHash("sha256").update(value).digest("hex").slice(0, 16);
-}
-
 function resolveScope(forceGlobal) {
   if (forceGlobal) {
     return { type: "global", label: "global" };
@@ -169,6 +164,10 @@ function isInsideFolder(cwd, folderRoot) {
 
 function increment(map, key, amount = 1) {
   map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function sumMapValues(map) {
+  return [...map.values()].reduce((sum, value) => sum + value, 0);
 }
 
 function emptyTokens() {
@@ -241,35 +240,53 @@ function mapFromEntries(entries) {
   return new Map(entries ?? []);
 }
 
-function serializeSession(session) {
+function serializeDailySession(session) {
   return {
     ...session,
-    firstTs: session.firstTs.toISOString(),
+    firstTs: session.firstTs?.toISOString() ?? null,
     lastTs: session.lastTs?.toISOString() ?? null,
     messages: mapEntries(session.messages),
     tools: mapEntries(session.tools),
     modelTokens: mapEntries(session.modelTokens),
     models: mapEntries(session.models),
-    skillEvidence: {
-      reads: mapEntries(session.skillEvidence?.reads),
-      mentions: mapEntries(session.skillEvidence?.mentions),
+    rawSkillEvidence: {
+      reads: mapEntries(session.rawSkillEvidence?.reads),
+      mentions: mapEntries(session.rawSkillEvidence?.mentions),
     },
   };
 }
 
-function deserializeSession(value) {
+function deserializeDailySession(value) {
   return {
     ...value,
-    firstTs: new Date(value.firstTs),
+    firstTs: value.firstTs ? new Date(value.firstTs) : null,
     lastTs: value.lastTs ? new Date(value.lastTs) : null,
     messages: mapFromEntries(value.messages),
     tools: mapFromEntries(value.tools),
     modelTokens: mapFromEntries(value.modelTokens),
     models: mapFromEntries(value.models),
-    skillEvidence: {
-      reads: mapFromEntries(value.skillEvidence?.reads),
-      mentions: mapFromEntries(value.skillEvidence?.mentions),
+    rawSkillEvidence: {
+      reads: mapFromEntries(value.rawSkillEvidence?.reads),
+      mentions: mapFromEntries(value.rawSkillEvidence?.mentions),
     },
+  };
+}
+
+function serializeParsedSession(session) {
+  return {
+    ...session,
+    days: mapEntries(new Map(
+      [...session.days].map(([day, value]) => [day, serializeDailySession(value)]),
+    )),
+  };
+}
+
+function deserializeParsedSession(value) {
+  return {
+    ...value,
+    days: new Map(
+      (value.days ?? []).map(([day, session]) => [day, deserializeDailySession(session)]),
+    ),
   };
 }
 
@@ -292,15 +309,6 @@ async function writeSessionCache(cache) {
   } catch {
     // Cache writes are a performance optimization; reporting should still work.
   }
-}
-
-function cacheRangeKey(start, end, skillRegistry) {
-  const skillKey = skillRegistry?.cacheKey ?? "none";
-  return `${start?.toISOString() ?? ""}|${end.toISOString()}|skills:${skillKey}`;
-}
-
-function cacheEntryKey(filePath, rangeKey) {
-  return `${filePath}\u0000${rangeKey}`;
 }
 
 async function sessionFiles(root) {
@@ -433,15 +441,20 @@ async function discoverSkills(scope) {
     }
   }
 
-  const cacheKey = hashText([...byPath.keys()].sort().join("\n"));
-  return { byPath, byName, cacheKey };
+  return { byPath, byName };
 }
 
 function emptySkillEvidence() {
   return {
     reads: new Map(),
     mentions: new Map(),
+    names: new Map(),
+    scopes: new Map(),
   };
+}
+
+function skillEvidenceKey(info) {
+  return `${info.scope}\0${info.name}`;
 }
 
 function normalizeSkillPath(value) {
@@ -470,12 +483,15 @@ function skillReadPathsFromCommand(command) {
   }
 
   return [...String(command).matchAll(SKILL_PATH_RE)]
-    .map((match) => normalizeSkillPath(match[0]));
+    .map((match) => normalizeSkillPath(match[1]));
 }
 
-function recordSkillRead(evidence, skillRegistry, skillPath) {
+function recordSkillRead(evidence, skillRegistry, skillPath, count = 1) {
   const info = skillRegistry?.byPath.get(skillPath) ?? skillInfoForPath(skillPath);
-  increment(evidence.reads, info.name);
+  const key = skillEvidenceKey(info);
+  increment(evidence.reads, key, count);
+  evidence.names.set(key, info.name);
+  evidence.scopes.set(key, info.scope);
 }
 
 function recordSkillMentions(evidence, skillRegistry, message) {
@@ -493,7 +509,185 @@ function recordSkillMentions(evidence, skillRegistry, message) {
 
   for (const name of mentioned) {
     increment(evidence.mentions, name);
+    evidence.names.set(name, name);
+    evidence.scopes.set(name, skillRegistry.byName.get(name).scope);
   }
+}
+
+function emptyRawSkillEvidence() {
+  return {
+    reads: new Map(),
+    mentions: new Map(),
+  };
+}
+
+function recordRawSkillMentions(evidence, message) {
+  const mentioned = new Set();
+  for (const match of String(message ?? "").matchAll(/\$([A-Za-z0-9][A-Za-z0-9:_-]*)/g)) {
+    mentioned.add(match[1]);
+  }
+  for (const name of mentioned) {
+    increment(evidence.mentions, name);
+  }
+}
+
+function emptyDailySession() {
+  return {
+    firstTs: null,
+    lastTs: null,
+    messages: new Map(),
+    tools: new Map(),
+    tokens: emptyTokens(),
+    modelTokens: new Map(),
+    models: new Map(),
+    rawSkillEvidence: emptyRawSkillEvidence(),
+    tokenEvents: 0,
+  };
+}
+
+function dailySessionFor(days, ts) {
+  const day = ts ? localDay(ts) : "(undated)";
+  if (!days.has(day)) {
+    days.set(day, emptyDailySession());
+  }
+  const session = days.get(day);
+  if (ts) {
+    session.firstTs = session.firstTs == null || ts < session.firstTs ? ts : session.firstTs;
+    session.lastTs = session.lastTs == null || ts > session.lastTs ? ts : session.lastTs;
+  }
+  return session;
+}
+
+async function parseSessionFile(filePath) {
+  const meta = {};
+  const days = new Map();
+  let currentModel = null;
+  let previousTotalUsage = emptyTokens();
+  const stream = fs.createReadStream(filePath, { encoding: "utf8" });
+  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+  for await (const line of lines) {
+    let event;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    const ts = parseTimestamp(event.timestamp);
+    const eventType = event.type;
+    const payload = event.payload ?? {};
+
+    if (eventType === "session_meta") {
+      Object.assign(meta, payload);
+    }
+
+    const daySession = dailySessionFor(days, ts);
+    if (eventType === "turn_context") {
+      if (payload.model) {
+        currentModel = payload.model;
+        increment(daySession.models, payload.model);
+      }
+    } else if (eventType === "event_msg") {
+      if (payload.type === "user_message") {
+        increment(daySession.messages, "user");
+        recordRawSkillMentions(daySession.rawSkillEvidence, payload.message);
+      } else if (payload.type === "agent_message") {
+        increment(daySession.messages, "assistant");
+      } else if (payload.type === "token_count") {
+        const info = payload.info;
+        const totalUsage = info?.total_token_usage;
+        const usage = totalUsage
+          ? (tokenDelta(totalUsage, previousTotalUsage) ?? info?.last_token_usage)
+          : info?.last_token_usage;
+        if (totalUsage) {
+          previousTotalUsage = totalUsage;
+        }
+        if (usage) {
+          addTokens(daySession.tokens, usage);
+          addModelTokens(daySession.modelTokens, currentModel, usage);
+          if (tokenVolume(usage) > 0) {
+            daySession.tokenEvents += 1;
+          }
+        }
+      }
+    } else if (eventType === "response_item") {
+      if (payload.type === "function_call" || payload.type === "custom_tool_call") {
+        increment(daySession.tools, payload.name ?? payload.type);
+        const args = parseFunctionArguments(payload.arguments);
+        for (const skillPath of skillReadPathsFromCommand(args.cmd ?? args.command ?? "")) {
+          increment(daySession.rawSkillEvidence.reads, skillPath);
+        }
+      }
+    }
+  }
+
+  if (![...days.values()].some((day) => day.firstTs)) {
+    return null;
+  }
+
+  return {
+    path: filePath,
+    id: meta.id ?? path.basename(filePath, ".jsonl"),
+    cwd: label(meta.cwd),
+    provider: label(meta.model_provider),
+    source: label(meta.originator ?? meta.source),
+    days,
+  };
+}
+
+function mergeDailySession(target, source, skillRegistry) {
+  for (const key of TOKEN_KEYS) target.tokens[key] += source.tokens[key] ?? 0;
+  for (const [key, value] of source.messages) increment(target.messages, key, value);
+  for (const [key, value] of source.tools) increment(target.tools, key, value);
+  for (const [key, value] of source.models) increment(target.models, key, value);
+  mergeTokenMaps(target.modelTokens, source.modelTokens);
+  target.tokenEvents += source.tokenEvents ?? 0;
+
+  for (const [skillPath, count] of source.rawSkillEvidence?.reads ?? []) {
+    recordSkillRead(target.skillEvidence, skillRegistry, skillPath, count);
+  }
+  for (const [name, count] of source.rawSkillEvidence?.mentions ?? []) {
+    if (skillRegistry?.byName.has(name)) {
+      increment(target.skillEvidence.mentions, name, count);
+      target.skillEvidence.names.set(name, name);
+      target.skillEvidence.scopes.set(name, skillRegistry.byName.get(name).scope);
+    }
+  }
+}
+
+function materializeSession(parsed, start, end, skillRegistry) {
+  const session = {
+    path: parsed.path,
+    id: parsed.id,
+    firstTs: null,
+    lastTs: null,
+    cwd: parsed.cwd,
+    provider: parsed.provider,
+    source: parsed.source,
+    messages: new Map(),
+    tools: new Map(),
+    tokens: emptyTokens(),
+    modelTokens: new Map(),
+    models: new Map(),
+    skillEvidence: emptySkillEvidence(),
+    tokenEvents: 0,
+  };
+
+  for (const [day, daily] of parsed.days) {
+    const inRange = day === "(undated)"
+      || !((start && daily.lastTs < start) || daily.firstTs > end);
+    if (!inRange) {
+      continue;
+    }
+    if (daily.firstTs) {
+      session.firstTs = session.firstTs == null || daily.firstTs < session.firstTs ? daily.firstTs : session.firstTs;
+      session.lastTs = session.lastTs == null || daily.lastTs > session.lastTs ? daily.lastTs : session.lastTs;
+    }
+    mergeDailySession(session, daily, skillRegistry);
+  }
+
+  return session.firstTs ? session : null;
 }
 
 async function readSession(filePath, start, end, skillRegistry = null) {
@@ -621,7 +815,7 @@ async function readSessions(files, start, end, skillRegistry, useCache) {
 
   const cache = await readSessionCache();
   const sessions = [];
-  const rangeKey = cacheRangeKey(start, end, skillRegistry);
+  const nextEntries = {};
   let changed = false;
 
   for (const file of files) {
@@ -632,34 +826,36 @@ async function readSessions(files, start, end, skillRegistry, useCache) {
       continue;
     }
 
-    const key = cacheEntryKey(file, rangeKey);
-    const cached = cache.entries[key];
+    const cached = cache.entries[file];
+    let parsed;
     if (
       cached
       && cached.mtimeMs === stat.mtimeMs
       && cached.size === stat.size
-      && Object.hasOwn(cached, "session")
+      && Object.hasOwn(cached, "parsed")
     ) {
-      if (cached.session) {
-        sessions.push(deserializeSession(cached.session));
-      }
-      continue;
+      parsed = cached.parsed ? deserializeParsedSession(cached.parsed) : null;
+    } else {
+      parsed = await parseSessionFile(file);
+      changed = true;
     }
 
-    const session = await readSession(file, start, end, skillRegistry);
-    cache.entries[key] = {
+    nextEntries[file] = {
       mtimeMs: stat.mtimeMs,
       size: stat.size,
-      session: session ? serializeSession(session) : null,
+      parsed: parsed ? serializeParsedSession(parsed) : null,
     };
-    changed = true;
+    const session = parsed ? materializeSession(parsed, start, end, skillRegistry) : null;
     if (session) {
       sessions.push(session);
     }
   }
 
+  if (Object.keys(cache.entries).length !== Object.keys(nextEntries).length) {
+    changed = true;
+  }
   if (changed) {
-    await writeSessionCache(cache);
+    await writeSessionCache({ version: SESSION_CACHE_VERSION, entries: nextEntries });
   }
 
   return sessions;
@@ -850,11 +1046,21 @@ function topSection(lines, title, map, limit, unit, innerWidth) {
 }
 
 function mergeSkillEvidence(target, source) {
-  for (const [name, count] of source.reads ?? []) {
-    increment(target.reads, name, count);
+  for (const [key, count] of source.reads ?? []) {
+    increment(target.reads, key, count);
   }
   for (const [name, count] of source.mentions ?? []) {
     increment(target.mentions, name, count);
+  }
+  for (const [key, name] of source.names ?? []) {
+    if (!target.names.has(key)) {
+      target.names.set(key, name);
+    }
+  }
+  for (const [key, scope] of source.scopes ?? []) {
+    if (!target.scopes.has(key) || target.scopes.get(key) === "unknown") {
+      target.scopes.set(key, scope);
+    }
   }
 }
 
@@ -865,22 +1071,25 @@ function aggregateSkills(sessions, skillRegistry) {
 
   for (const session of sessions) {
     mergeSkillEvidence(evidence, session.skillEvidence ?? emptySkillEvidence());
-    for (const name of session.skillEvidence?.reads?.keys() ?? []) {
-      increment(readSessions, name);
+    for (const key of session.skillEvidence?.reads?.keys() ?? []) {
+      increment(readSessions, key);
     }
     for (const name of session.skillEvidence?.mentions?.keys() ?? []) {
       increment(mentionSessions, name);
     }
   }
 
+  const readNames = [...evidence.reads.keys()].map((key) => evidence.names.get(key) ?? key);
   const evidenceNames = new Set([
-    ...evidence.reads.keys(),
+    ...readNames,
     ...evidence.mentions.keys(),
   ]);
   const activeSkills = [...(skillRegistry?.byName.values() ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  const skillScopes = new Map(activeSkills.map((skill) => [skill.name, skill.scope]));
   const noEvidence = activeSkills
     .filter((skill) => !evidenceNames.has(skill.name))
     .map((skill) => skill.name);
+  const withEvidenceCount = activeSkills.length - noEvidence.length;
   const byScope = new Map();
 
   for (const skill of activeSkills) {
@@ -894,20 +1103,24 @@ function aggregateSkills(sessions, skillRegistry) {
     }
   }
 
-  const topReads = sortedEntries(evidence.reads).map(([name, reads]) => ({
-    name,
+  const topReads = sortedEntries(evidence.reads).map(([key, reads]) => ({
+    key,
+    name: evidence.names.get(key) ?? key,
+    scope: evidence.scopes.get(key) ?? skillScopes.get(evidence.names.get(key)) ?? "unknown",
     reads,
-    readSessions: readSessions.get(name) ?? 0,
-    mentions: evidence.mentions.get(name) ?? 0,
-    mentionSessions: mentionSessions.get(name) ?? 0,
+    readSessions: readSessions.get(key) ?? 0,
+    mentions: evidence.mentions.get(evidence.names.get(key) ?? key) ?? 0,
+    mentionSessions: mentionSessions.get(evidence.names.get(key) ?? key) ?? 0,
   }));
 
   return {
     activeSkills,
+    withEvidenceCount,
     evidence,
     evidenceNames,
     noEvidence,
     byScope,
+    skillScopes,
     topReads,
     readSessions,
     mentionSessions,
@@ -1038,13 +1251,15 @@ function plainCostSection(estimate, limit) {
 }
 
 function plainSkillsSection(analysis, limit) {
+  const scopeOrder = ["personal", "app", "system", "repo", "unknown"];
+  const scopeLabel = (scope) => (scope === "repo" ? "repo-specific" : scope);
   const lines = [
     "Skills",
     "",
     `Active skills        ${fmtInt(analysis.activeSkills.length)}`,
-    `With evidence        ${fmtInt(analysis.evidenceNames.size)}`,
-    `SKILL.md reads       ${fmtInt(analysis.evidence.reads.size)}`,
-    `$skill mentions     ${fmtInt(analysis.evidence.mentions.size)}`,
+    `With evidence        ${fmtInt(analysis.withEvidenceCount)}`,
+    `SKILL.md reads       ${fmtInt(sumMapValues(analysis.evidence.reads))}`,
+    `$skill mentions     ${fmtInt(sumMapValues(analysis.evidence.mentions))}`,
     `No evidence          ${fmtInt(analysis.noEvidence.length)}`,
     "",
     "Top skills by SKILL.md reads",
@@ -1055,15 +1270,27 @@ function plainSkillsSection(analysis, limit) {
     lines.push("none");
   } else {
     const totalReads = analysis.topReads.reduce((sum, entry) => sum + entry.reads, 0);
-    const nameWidth = Math.min(
-      Math.max(18, terminalWidth() - 50),
-      Math.max(18, ...analysis.topReads.slice(0, limit).map((entry) => entry.name.length)),
-    );
-    for (const entry of analysis.topReads.slice(0, limit)) {
-      const reads = `${fmtInt(entry.reads)} reads`.padStart(10);
-      const sessions = `${fmtInt(entry.readSessions)} sessions`.padStart(12);
-      const percent = totalReads > 0 ? Math.round((entry.reads / totalReads) * 100) : 0;
-      lines.push(`${truncateMiddle(entry.name, nameWidth).padEnd(nameWidth)} ${reads} ${sessions}  ${bar(entry.reads, totalReads, 16)} ${`${percent}%`.padStart(4)}`);
+    for (const scope of scopeOrder) {
+      const entries = analysis.topReads.filter((entry) => entry.scope === scope);
+      if (entries.length === 0) {
+        continue;
+      }
+
+      if (lines.at(-1) !== "") {
+        lines.push("");
+      }
+      lines.push(scopeLabel(scope));
+
+      const nameWidth = Math.min(
+        Math.max(18, terminalWidth() - 50),
+        Math.max(18, ...entries.slice(0, limit).map((entry) => entry.name.length)),
+      );
+      for (const entry of entries.slice(0, limit)) {
+        const reads = `${fmtInt(entry.reads)} reads`.padStart(10);
+        const sessions = `${fmtInt(entry.readSessions)} sessions`.padStart(12);
+        const percent = totalReads > 0 ? Math.round((entry.reads / totalReads) * 100) : 0;
+        lines.push(`${truncateMiddle(entry.name, nameWidth).padEnd(nameWidth)} ${reads} ${sessions}  ${bar(entry.reads, totalReads, 16)} ${`${percent}%`.padStart(4)}`);
+      }
     }
   }
 
@@ -1071,14 +1298,13 @@ function plainSkillsSection(analysis, limit) {
   lines.push("Active skills by scope");
   lines.push("");
 
-  const scopeOrder = ["personal", "app", "system", "repo", "unknown"];
   const totalActive = analysis.activeSkills.length;
   for (const scope of scopeOrder) {
     const row = analysis.byScope.get(scope);
     if (!row) {
       continue;
     }
-    const labelText = scope === "repo" ? "repo-specific" : scope;
+    const labelText = scopeLabel(scope);
     const detail = `${fmtInt(row.evidence)}/${fmtInt(row.active)} with evidence`.padStart(24);
     const percent = totalActive > 0 ? Math.round((row.active / totalActive) * 100) : 0;
     lines.push(`${labelText.padEnd(14)} ${detail}  ${bar(row.active, totalActive, 16)} ${`${percent}%`.padStart(4)}`);
@@ -1340,7 +1566,8 @@ async function main() {
   const wantsSkills = args.sections.includes("skills");
   const skillRegistry = wantsSkills ? await discoverSkills(scope) : null;
   const files = await sessionFiles(SESSIONS_DIR);
-  const allSessions = (await readSessions(files, start, end, skillRegistry, args.cache))
+  const cacheSupportsRange = !args.from?.includes("T") && !args.to?.includes("T");
+  const allSessions = (await readSessions(files, start, end, skillRegistry, args.cache && cacheSupportsRange))
     .filter((session) => hasActivity(session));
 
   const sessions = [];

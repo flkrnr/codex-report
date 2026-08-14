@@ -153,8 +153,10 @@ $ codex-report --global
 - When the current folder has no matching Codex sessions, the CLI falls back
   to a global report.
 - Dates without times are interpreted in the local timezone.
-- Parsed session summaries are cached under `~/.codex/cache` by default and
-  invalidated when the source JSONL file, date range, or skill registry changes.
+- Parsed daily session summaries are cached once per source file under
+  `~/.codex/cache` by default. A source JSONL size or modification-time change
+  invalidates its entry; date ranges and the current skill registry are applied
+  after loading the cache.
 - Token totals are based on Codex `token_count` events in local session logs.
 - API cost totals are estimates based on OpenAI standard text-token list
   prices for each recognized model. Cached input is billed at the cached-input

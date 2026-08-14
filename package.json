@@ -28,7 +28,8 @@
   },
   "scripts": {
     "report": "node ./bin/codex-report.js",
-    "test": "node ./bin/codex-report.js --top 3"
+    "test": "node --test",
+    "test:smoke": "node ./bin/codex-report.js --top 3"
   },
   "engines": {
     "node": ">=20"
