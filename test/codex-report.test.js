@@ -62,7 +62,7 @@ test("counts skill evidence and reuses one cache entry across date ranges", asyn
   assert.match(first, /\$skill mentions\s+2/);
   assert.match(first, /demo\s+2 reads/);
 
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v5.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v6.json");
   const firstCache = JSON.parse(await fs.readFile(cachePath, "utf8"));
   assert.equal(Object.keys(firstCache.entries).length, 1);
 
@@ -103,7 +103,7 @@ test("bypasses day cache for precise timestamp ranges", async (t) => {
     "2026-08-14T12:00:00Z",
   ]);
   assert.match(output, /gpt-5\s+1 turns/);
-  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v5.json")));
+  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v6.json")));
 });
 
 test("cached day summaries preserve token deltas across midnight", async (t) => {
@@ -147,4 +147,98 @@ test("cached day summaries preserve token deltas across midnight", async (t) => 
   const uncached = await runReport(home, [...args, "--no-cache"]);
   assert.equal(cached, uncached);
   assert.match(cached, /50 in · 40 cached · 5 out/);
+});
+
+test("applies official standard prices for GPT-5.6 models", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  const models = ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
+  for (const [index, model] of models.entries()) {
+    await fs.writeFile(path.join(sessionDir, `${index}.jsonl`), [
+      event("2026-08-14T08:00:00Z", "session_meta", { id: `pricing-${index}`, cwd: REPO_ROOT }),
+      event("2026-08-14T08:01:00Z", "turn_context", { model }),
+      event("2026-08-14T08:02:00Z", "event_msg", {
+        type: "token_count",
+        info: {
+          total_token_usage: {
+            input_tokens: 2_000_000,
+            cached_input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            reasoning_output_tokens: 0,
+            total_tokens: 3_000_000,
+          },
+        },
+      }),
+    ].join("\n"));
+  }
+
+  const output = await runReport(home, ["--global", "--costs", "--from", "2026-08-14", "--to", "2026-08-14"]);
+  assert.match(output, /gpt-5\.6\s+\$35\.50/);
+  assert.match(output, /gpt-5\.6-sol\s+\$35\.50/);
+  assert.match(output, /gpt-5\.6-terra\s+\$14\.20/);
+  assert.match(output, /gpt-5\.6-luna\s+\$1\.420/);
+  assert.match(output, /Total estimated API cost: \$86\.62/);
+});
+
+test("groups remote worktrees, local repositories, and non-Git directories", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+
+  const localRepo = path.join(home, "local-repo");
+  const localWorktree = path.join(home, "local-worktree");
+  const plainDirectory = path.join(home, "plain-directory");
+  await fs.mkdir(plainDirectory, { recursive: true });
+  await execFileAsync("git", ["init", localRepo]);
+  await execFileAsync("git", ["-C", localRepo, "config", "user.email", "test@example.com"]);
+  await execFileAsync("git", ["-C", localRepo, "config", "user.name", "Test User"]);
+  await fs.writeFile(path.join(localRepo, "README.md"), "test\n");
+  await execFileAsync("git", ["-C", localRepo, "add", "README.md"]);
+  await execFileAsync("git", ["-C", localRepo, "commit", "-m", "Initial commit"]);
+  await execFileAsync("git", ["-C", localRepo, "worktree", "add", "-b", "test-worktree", localWorktree]);
+
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  const sessions = [
+    { cwd: "/deleted/worktree-one", repositoryUrl: "git@github.com:acme/example.git" },
+    { cwd: "/deleted/worktree-two", repositoryUrl: "https://github.com/acme/example.git" },
+    { cwd: localRepo },
+    { cwd: localWorktree },
+    { cwd: plainDirectory },
+  ];
+  for (const [index, session] of sessions.entries()) {
+    const git = session.repositoryUrl ? { repository_url: session.repositoryUrl } : undefined;
+    await fs.writeFile(path.join(sessionDir, `${index}.jsonl`), [
+      event("2026-08-14T08:00:00Z", "session_meta", { id: `repo-${index}`, cwd: session.cwd, git }),
+      event("2026-08-14T08:01:00Z", "event_msg", { type: "user_message", message: "work" }),
+    ].join("\n"));
+  }
+
+  const output = await runReport(home, ["--global", "--repositories", "--from", "2026-08-14", "--to", "2026-08-14"]);
+  assert.match(output, /github\.com\/acme\/example\s+2 sessions/);
+  assert.ok(output.split("\n").some((line) => line.includes("local-repo") && line.includes("2 sessions")));
+  assert.ok(output.split("\n").some((line) => line.includes("plain-directory") && line.includes("1 sessions")));
+});
+
+test("aggregates activity by month", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  await fs.writeFile(path.join(sessionDir, "january.jsonl"), [
+    event("2026-01-10T08:00:00Z", "session_meta", { id: "january", cwd: REPO_ROOT }),
+    event("2026-01-10T08:01:00Z", "event_msg", { type: "user_message", message: "one" }),
+    event("2026-01-10T08:02:00Z", "event_msg", { type: "agent_message", message: "two" }),
+  ].join("\n"));
+  await fs.writeFile(path.join(sessionDir, "february.jsonl"), [
+    event("2026-02-10T08:00:00Z", "session_meta", { id: "february", cwd: REPO_ROOT }),
+    event("2026-02-10T08:01:00Z", "event_msg", { type: "user_message", message: "three" }),
+  ].join("\n"));
+
+  const output = await runReport(home, ["--global", "--monthly", "--from", "2026-01-01", "--to", "2026-02-28"]);
+  assert.match(output, /2026-01\s+2 msg/);
+  assert.match(output, /2026-02\s+1 msg/);
 });
