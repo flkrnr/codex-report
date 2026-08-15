@@ -1,0 +1,46 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          package_version=$(node --print "require('./package.json').version")
+          tag_version=${GITHUB_REF_NAME#v}
+          if [[ "$package_version" != "$tag_version" ]]; then
+            echo "package.json version $package_version does not match release tag $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      - name: Test
+        run: npm test
+
+      - name: Validate package
+        run: npm pack --dry-run
+
+      - name: Publish
+        run: npm publish
