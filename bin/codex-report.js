@@ -19,8 +19,12 @@ const TOKEN_KEYS = [
   "total_tokens",
 ];
 // Standard OpenAI API text-token list prices in USD per 1M tokens.
-// Sources: developers.openai.com model pages and openai.com/api/pricing, checked 2026-05-09.
+// Sources: developers.openai.com model pages and openai.com/api/pricing, checked 2026-08-15.
 const MODEL_PRICES_USD_PER_1M = new Map([
+  ["gpt-5.6", { input: 5, cachedInput: 0.5, output: 30 }],
+  ["gpt-5.6-sol", { input: 5, cachedInput: 0.5, output: 30 }],
+  ["gpt-5.6-terra", { input: 2, cachedInput: 0.2, output: 12 }],
+  ["gpt-5.6-luna", { input: 0.2, cachedInput: 0.02, output: 1.2 }],
   ["gpt-5.5", { input: 5, cachedInput: 0.5, output: 30 }],
   ["gpt-5.4", { input: 2.5, cachedInput: 0.25, output: 15 }],
   ["gpt-5.4-mini", { input: 0.75, cachedInput: 0.075, output: 4.5 }],

@@ -60,15 +60,40 @@ Token usage is attributed to the active model from the nearest preceding
 If a model is not in the built-in price table, its tokens are reported as
 unpriced and excluded from the estimated dollar total.
 
+## Built-In Prices
+
+The table contains standard text-token prices in USD per 1 million tokens. It
+was last checked on 2026-08-15 against the official
+[OpenAI API pricing documentation](https://developers.openai.com/api/docs/pricing)
+and model pages, including [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol),
+[Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra), and
+[Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
+
+| Model names | Input | Cached input | Output |
+| --- | ---: | ---: | ---: |
+| `gpt-5.6`, `gpt-5.6-sol` | $5.00 | $0.50 | $30.00 |
+| `gpt-5.6-terra` | $2.00 | $0.20 | $12.00 |
+| `gpt-5.6-luna` | $0.20 | $0.02 | $1.20 |
+| `gpt-5.5` | $5.00 | $0.50 | $30.00 |
+| `gpt-5.4` | $2.50 | $0.25 | $15.00 |
+| `gpt-5.4-mini` | $0.75 | $0.075 | $4.50 |
+| `gpt-5.4-nano` | $0.20 | $0.02 | $1.25 |
+| `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.2`, `gpt-5.2-chat-latest` | $1.75 | $0.175 | $14.00 |
+| `gpt-5.1-codex-max`, `gpt-5.1-codex`, `gpt-5.1`, `gpt-5-codex`, `gpt-5` | $1.25 | $0.125 | $10.00 |
+| `gpt-5.1-codex-mini`, `gpt-5-mini` | $0.25 | $0.025 | $2.00 |
+| `codex-mini-latest` | $1.50 | $0.375 | $6.00 |
+
+The unsuffixed `gpt-5.6` alias uses GPT-5.6 Sol pricing.
+
 ## Pricing Formula
 
 Prices are stored as USD per 1 million tokens for each known model:
 
 ```text
 cost =
-  uncached_input_tokens * input_price
-+ cached_input_tokens   * cached_input_price
-+ output_tokens         * output_price
+  (uncached_input_tokens / 1,000,000) * input_price
++ (cached_input_tokens   / 1,000,000) * cached_input_price
++ (output_tokens         / 1,000,000) * output_price
 ```
 
 `cached_input_tokens` is clamped so it can never exceed `input_tokens`.
@@ -101,6 +126,12 @@ The estimate is not the actual cost of your ChatGPT or Codex subscription.
 Subscription quota, usage dashboard charts, included usage, credits, discounts,
 batch pricing, regional processing differences, and non-token tool charges are
 not included.
+
+GPT-5.6 estimates use standard processing prices. The local aggregate does not
+reliably identify Fast-mode requests, cache writes, or individual requests over
+the 272K-input-token long-context threshold. Their Fast-mode premiums,
+1.25x cache-write pricing, and long-context multipliers are therefore not
+included.
 
 The estimate answers a narrower question:
 
