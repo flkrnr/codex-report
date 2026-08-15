@@ -2,9 +2,10 @@
 
 A tiny CLI that shows how much you're actually burning with Codex.
 
-The CLI reads Codex session JSONL files from `~/.codex/sessions` and prints
-session, message, token, model, project, tool, activity, and estimated API
-cost stats.
+The CLI reads Codex session JSONL files from `~/.codex/sessions` and reports
+sessions, messages, tokens, models, projects, repositories, tools, skills,
+daily and monthly activity, and estimated API-equivalent costs. Parsed daily
+session summaries are cached locally to keep repeated reports fast.
 
 ## Quick start
 
@@ -73,11 +74,23 @@ codex-report --models
 codex-report --models --tools
 codex-report --costs
 codex-report --skills
+codex-report --global --repositories
+codex-report --global --monthly
 codex-report --global --weekly --activity --top 5
 ```
 
-Available section flags: `--weekly`, `--projects`, `--models`, `--tools`,
-`--activity`, `--sources`, `--providers`, `--costs`, and `--skills`.
+Available section flags: `--weekly`, `--monthly`, `--projects`, `--repositories`,
+`--models`, `--tools`, `--activity`, `--sources`, `--providers`, `--costs`, and
+`--skills`.
+
+The activity and project views answer different questions:
+
+- `--activity` groups activity by calendar day.
+- `--weekly` groups activity by weekday across the selected period.
+- `--monthly` groups activity by calendar month.
+- `--projects` groups sessions by their exact working directory.
+- `--repositories` consolidates Git worktrees by repository and retains
+  non-Git working directories as separate entries.
 
 API cost estimation is experimental and should be treated as an approximation,
 not billing data. For details on how estimates are calculated, see
@@ -90,58 +103,66 @@ $ codex-report --global
 
 ┌─ codex-report ───────────────────────────────────────────────────────────────────────┐
 │ Scope       global                                                                   │
-│ Period      2025-09-19 → 2026-04-29                                                  │
-│ Sessions    476                                                                      │
-│ Projects    13                                                                       │
-│ Messages    34,740 (8,024 user, 26,716 assistant)                                    │
-│ Tokens      7,907,745,582 total                                                      │
-│             7,841,153,859 input · 7,221,436,800 cached · 36,187,755 output           │
-│ API cost    $335.91 estimated from priced local tokens                               │
-│ Active days 125 · longest streak 28 days                                             │
-│ Busiest day 2026-03-25 (2,373 messages)                                              │
+│ Period      2025-09-19 → 2026-08-15                                                  │
+│ Sessions    1,026                                                                    │
+│ Projects    89                                                                       │
+│ Repos/dirs  50                                                                       │
+│ Messages    85,651 (19,598 user, 66,053 assistant)                                   │
+│ Tokens      16,080,902,795 total                                                     │
+│             16,030,807,609 input · 15,051,904,000 cached · 50,095,186 output         │
+│ API cost    $10,636 estimated from priced local tokens                               │
+│             265M tokens in unpriced models                                           │
+│ Active days 202 · longest streak 28 days                                             │
+│ Busiest day 2026-06-23 (2,796 messages)                                              │
 │                                                                                      │
 │ Weekly activity                                                                      │
-│   Mon  █████████████░░░░░░░░░░░░░░░    3,614 messages | 809M tok                     │
-│   Tue  ████████████████████████████    7,872 messages | 2.0B tok                     │
-│   Wed  ████████████████████████░░░░    6,623 messages | 1.3B tok                     │
-│   Thu  █████████████████████░░░░░░░    6,043 messages | 1.4B tok                     │
-│   Fri  █████████████████░░░░░░░░░░░    4,828 messages | 1.1B tok                     │
-│   Sat  ███████░░░░░░░░░░░░░░░░░░░░░    1,905 messages | 427M tok                     │
-│   Sun  ██████████████░░░░░░░░░░░░░░    3,855 messages | 803M tok                     │
+│   Mon  ███████░░░░░░░░░░░░░░░░░░░░░    5,892 messages | 884M tok                     │
+│   Tue  ████████████████████████████   22,059 messages | 3.7B tok                     │
+│   Wed  █████████████████████░░░░░░░   16,284 messages | 3.3B tok                     │
+│   Thu  ██████████████████░░░░░░░░░░   13,922 messages | 2.8B tok                     │
+│   Fri  █████████████████████░░░░░░░   16,459 messages | 3.7B tok                     │
+│   Sat  █████░░░░░░░░░░░░░░░░░░░░░░░    3,895 messages | 766M tok                     │
+│   Sun  █████████░░░░░░░░░░░░░░░░░░░    7,140 messages | 994M tok                     │
 │                                                                                      │
-│ Top projects                                                                         │
-│   ~/code/product-api                          205 sessions    ███████░░░░░░░░░  43%  │
-│   ~/code/mobile-app                           194 sessions    ███████░░░░░░░░░  41%  │
-│   ~/code/design-system                         39 sessions    █░░░░░░░░░░░░░░░   8%  │
+│ Top repositories and directories                                                     │
+│   github.com/acme/client                         837 sessions  █████████████░░░  82% │
+│   github.com/acme/backend                         90 sessions  █░░░░░░░░░░░░░░░   9% │
+│   ~/code/local-tool                               22 sessions  █░░░░░░░░░░░░░░░   2% │
 │                                                                                      │
 │ Top models                                                                           │
-│   gpt-5.2-codex                                 6,689 turns   █████░░░░░░░░░░░  29%  │
-│   gpt-5.4                                       4,745 turns   ███░░░░░░░░░░░░░  20%  │
-│   gpt-5.3-codex                                 3,909 turns   ███░░░░░░░░░░░░░  17%  │
+│   gpt-5.2-codex                                   6,689 turns  ███░░░░░░░░░░░░░  20% │
+│   gpt-5.5                                         5,918 turns  ███░░░░░░░░░░░░░  18% │
+│   gpt-5.4                                         4,753 turns  ██░░░░░░░░░░░░░░  14% │
 │                                                                                      │
 │ Estimated API cost by model                                                          │
-│   gpt-5.4                                           $160.25  2.1B in · 1.9B cached   │
-│   gpt-5.2-codex                                     $102.10  3.2B in · 3.0B cached   │
-│   gpt-5.3-codex                                      $73.56  1.1B in · 1.0B cached   │
+│   gpt-5.5                            $5,019  5.9B in · 5.6B cached · 15M out     47% │
+│   gpt-5.6-sol                        $3,129  4.4B in · 4.2B cached · 10M out     29% │
+│   gpt-5.4                            $1,990  3.9B in · 3.5B cached · 15M out     19% │
+│   unpriced: (unknown), codex-auto-review, gpt-5.3-codex-spark                        │
 │                                                                                      │
 │ Top tools                                                                            │
-│   exec_command                                 46,384 calls   ██████████░░░░░░  63%  │
-│   apply_patch                                   8,287 calls   ██░░░░░░░░░░░░░░  11%  │
-│   write_stdin                                   7,649 calls   ██░░░░░░░░░░░░░░  10%  │
+│   exec_command                                   93,462 calls  ██████████░░░░░░  60% │
+│   exec                                           16,198 calls  ██░░░░░░░░░░░░░░  10% │
+│   apply_patch                                    13,995 calls  █░░░░░░░░░░░░░░░   9% │
 │                                                                                      │
 │ Activity by day                                                                      │
-│   2026-03-25                              2.4K msg | 402M tok █░░░░░░░░░░░░░░░   7%  │
-│   2026-03-08                              2.3K msg | 380M tok █░░░░░░░░░░░░░░░   7%  │
-│   2026-03-14                              1.5K msg | 348M tok █░░░░░░░░░░░░░░░   4%  │
+│   2026-06-23                              2.8K msg | 402M tok  █░░░░░░░░░░░░░░░   3% │
+│   2026-06-30                              2.6K msg | 337M tok  █░░░░░░░░░░░░░░░   3% │
+│   2026-03-25                              2.4K msg | 322M tok  █░░░░░░░░░░░░░░░   3% │
+│                                                                                      │
+│ Activity by month                                                                    │
+│   2026-03                                  18K msg | 2.8B tok  ███░░░░░░░░░░░░░  21% │
+│   2026-06                                  16K msg | 2.0B tok  ███░░░░░░░░░░░░░  19% │
+│   2026-04                                  14K msg | 2.3B tok  ███░░░░░░░░░░░░░  16% │
 │                                                                                      │
 │ Sources                                                                              │
-│   Codex Desktop                                326 sessions   ███████████░░░░░  67%  │
-│   codex_cli_rs                                 101 sessions   ███░░░░░░░░░░░░░  21%  │
-│   codex_vscode                                  54 sessions   ██░░░░░░░░░░░░░░  11%  │
+│   Codex Desktop                                  859 sessions  █████████████░░░  84% │
+│   codex_cli_rs                                   101 sessions  ██░░░░░░░░░░░░░░  10% │
+│   codex_vscode                                    54 sessions  █░░░░░░░░░░░░░░░   5% │
 │                                                                                      │
 │ Providers                                                                            │
-│   openai                                       454 sessions   ███████████████░  95%  │
-│   (unknown)                                     22 sessions   █░░░░░░░░░░░░░░░   5%  │
+│   openai                                       1,004 sessions  ████████████████  98% │
+│   (unknown)                                       22 sessions  █░░░░░░░░░░░░░░░   2% │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -150,6 +171,12 @@ $ codex-report --global
 - No external Node dependencies are required.
 - By default, the report is scoped to the current folder.
 - Use `--global` to report across all projects.
+- Repository totals prefer the recorded Git remote URL, then a live checkout's
+  shared Git common directory. Worktrees of the same repository are grouped
+  together, including local-only repositories. Non-Git sessions fall back to
+  their exact working directory.
+- Use `--projects` for exact working-directory totals and `--repositories` for
+  consolidated repository and non-Git directory totals.
 - When the current folder has no matching Codex sessions, the CLI falls back
   to a global report.
 - Dates without times are interpreted in the local timezone.
