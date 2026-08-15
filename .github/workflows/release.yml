@@ -1,0 +1,131 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, for example 0.5.0
+        required: true
+        type: string
+      release_notes:
+        description: Optional GitHub Release notes in Markdown
+        required: false
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Validate version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const requested = process.env.RELEASE_VERSION;
+          const current = require("./package.json").version;
+          const pattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+          function parse(version) {
+            const match = pattern.exec(version);
+            if (!match) return null;
+            return match.slice(1, 4).map(Number);
+          }
+
+          function compare(left, right) {
+            for (let index = 0; index < 3; index += 1) {
+              if (left[index] !== right[index]) return left[index] - right[index];
+            }
+            return 0;
+          }
+
+          const requestedVersion = parse(requested);
+          const currentVersion = parse(current);
+          if (!requestedVersion) {
+            console.error(`Invalid release version: ${requested}; expected X.Y.Z without a leading v`);
+            process.exit(1);
+          }
+          if (!currentVersion) {
+            console.error(`Current package version is invalid: ${current}`);
+            process.exit(1);
+          }
+          if (compare(requestedVersion, currentVersion) <= 0) {
+            console.error(`Release version ${requested} must be greater than current version ${current}`);
+            process.exit(1);
+          }
+          NODE
+
+          if git rev-parse --verify --quiet "refs/tags/v$RELEASE_VERSION"; then
+            echo "Tag v$RELEASE_VERSION already exists" >&2
+            exit 1
+          fi
+
+      - name: Set package version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Test
+        run: npm test
+
+      - name: Validate package
+        run: npm pack --dry-run
+
+      - name: Commit version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          if git diff --quiet -- package.json; then
+            echo "package.json is already at $RELEASE_VERSION"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "Release v$RELEASE_VERSION"
+          git push origin HEAD:main
+
+      - name: Create tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          tag="v$RELEASE_VERSION"
+          git tag "$tag"
+          git push origin "$tag"
+          if [[ -n "$RELEASE_NOTES" ]]; then
+            notes_file="$RUNNER_TEMP/release-notes.md"
+            printf '%s\n' "$RELEASE_NOTES" > "$notes_file"
+            gh release create "$tag" --target main --title "codex-report $tag" --notes-file "$notes_file"
+          else
+            gh release create "$tag" --target main --title "codex-report $tag" --generate-notes
+          fi
+
+      - name: Publish to npm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: gh workflow run publish.yml --ref main -f tag="v$RELEASE_VERSION"
