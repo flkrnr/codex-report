@@ -127,11 +127,12 @@ Subscription quota, usage dashboard charts, included usage, credits, discounts,
 batch pricing, regional processing differences, and non-token tool charges are
 not included.
 
-GPT-5.6 estimates use standard processing prices. The local aggregate does not
-reliably identify Fast-mode requests, cache writes, or individual requests over
-the 272K-input-token long-context threshold. Their Fast-mode premiums,
-1.25x cache-write pricing, and long-context multipliers are therefore not
-included.
+GPT-5.6 estimates use standard processing prices. The report can identify many
+Fast-mode turns from local `service_tier` settings, but the cost estimate does
+not apply Fast-mode pricing. Cache writes and individual requests over the
+272K-input-token long-context threshold are also not identified reliably.
+Fast-mode premiums, 1.25x cache-write pricing, and long-context multipliers are
+therefore not included.
 
 The estimate answers a narrower question:
 

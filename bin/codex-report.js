@@ -10,6 +10,7 @@ const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
 const SESSION_CACHE_VERSION = 6;
 const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v6.json");
+const INSIGHTS_CACHE_VERSION = 2;
 const execFileAsync = promisify(execFile);
 const SKILL_MD = "SKILL.md";
 const SKILL_READ_COMMAND_RE = /(^|[;&|]\s*|["']\s*)\s*(?:[^\s"';&|]+[\\/])?(sed|cat|nl|wc|awk|head|tail)\b/;
@@ -59,15 +60,16 @@ const SECTION_FLAGS = new Map([
   ["--sources", "sources"],
   ["--providers", "providers"],
   ["--costs", "costs"],
+  ["--insights", "insights"],
   ["--skills", "skills"],
 ]);
 
 function usage() {
-  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--no-cache] [--weekly] [--monthly] [--projects] [--repositories] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--skills]");
+  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--no-cache] [--clear-cache] [--weekly] [--monthly] [--projects] [--repositories] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--insights] [--skills]");
 }
 
 function parseArgs(argv) {
-  const args = { from: null, to: null, global: false, top: 10, cache: true, sections: [] };
+  const args = { from: null, to: null, global: false, top: 10, cache: true, clearCache: false, sections: [] };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -86,6 +88,8 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === "--no-cache") {
       args.cache = false;
+    } else if (arg === "--clear-cache") {
+      args.clearCache = true;
     } else if (SECTION_FLAGS.has(arg)) {
       const section = SECTION_FLAGS.get(arg);
       if (!args.sections.includes(section)) {
@@ -346,6 +350,8 @@ function serializeDailySession(session) {
     tools: mapEntries(session.tools),
     modelTokens: mapEntries(session.modelTokens),
     models: mapEntries(session.models),
+    serviceTiers: mapEntries(session.serviceTiers),
+    reasoningEfforts: mapEntries(session.reasoningEfforts),
     rawSkillEvidence: {
       reads: mapEntries(session.rawSkillEvidence?.reads),
       mentions: mapEntries(session.rawSkillEvidence?.mentions),
@@ -362,6 +368,8 @@ function deserializeDailySession(value) {
     tools: mapFromEntries(value.tools),
     modelTokens: mapFromEntries(value.modelTokens),
     models: mapFromEntries(value.models),
+    serviceTiers: mapFromEntries(value.serviceTiers),
+    reasoningEfforts: mapFromEntries(value.reasoningEfforts),
     rawSkillEvidence: {
       reads: mapFromEntries(value.rawSkillEvidence?.reads),
       mentions: mapFromEntries(value.rawSkillEvidence?.mentions),
@@ -406,6 +414,23 @@ async function writeSessionCache(cache) {
   } catch {
     // Cache writes are a performance optimization; reporting should still work.
   }
+}
+
+async function clearSessionCaches() {
+  const cacheDir = path.dirname(SESSION_CACHE_PATH);
+  let entries;
+  try {
+    entries = await fs.promises.readdir(cacheDir, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return 0;
+    throw error;
+  }
+
+  const cacheFiles = entries.filter((entry) => (
+    entry.isFile() && /^codex-report-sessions-v\d+\.json$/.test(entry.name)
+  ));
+  await Promise.all(cacheFiles.map((entry) => fs.promises.unlink(path.join(cacheDir, entry.name))));
+  return cacheFiles.length;
 }
 
 async function sessionFiles(root) {
@@ -637,6 +662,8 @@ function emptyDailySession() {
     tokens: emptyTokens(),
     modelTokens: new Map(),
     models: new Map(),
+    serviceTiers: new Map(),
+    reasoningEfforts: new Map(),
     rawSkillEvidence: emptyRawSkillEvidence(),
     tokenEvents: 0,
   };
@@ -659,6 +686,8 @@ async function parseSessionFile(filePath) {
   const meta = {};
   const days = new Map();
   let currentModel = null;
+  let currentServiceTier = null;
+  let currentReasoningEffort = null;
   let previousTotalUsage = emptyTokens();
   const stream = fs.createReadStream(filePath, { encoding: "utf8" });
   const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
@@ -681,11 +710,17 @@ async function parseSessionFile(filePath) {
 
     const daySession = dailySessionFor(days, ts);
     if (eventType === "turn_context") {
+      currentReasoningEffort = payload.effort
+        ?? payload.collaboration_mode?.settings?.reasoning_effort
+        ?? currentReasoningEffort;
+      if (currentServiceTier) increment(daySession.serviceTiers, currentServiceTier);
+      if (currentReasoningEffort) increment(daySession.reasoningEfforts, currentReasoningEffort);
       if (payload.model) {
         currentModel = payload.model;
         increment(daySession.models, payload.model);
       }
     } else if (eventType === "event_msg") {
+      currentServiceTier = payload.thread_settings?.service_tier ?? currentServiceTier;
       if (payload.type === "user_message") {
         increment(daySession.messages, "user");
         recordRawSkillMentions(daySession.rawSkillEvidence, payload.message);
@@ -730,6 +765,7 @@ async function parseSessionFile(filePath) {
     repositoryUrl: typeof meta.git?.repository_url === "string" ? meta.git.repository_url : null,
     provider: label(meta.model_provider),
     source: label(meta.originator ?? meta.source),
+    insightsVersion: INSIGHTS_CACHE_VERSION,
     days,
   };
 }
@@ -739,6 +775,8 @@ function mergeDailySession(target, source, skillRegistry) {
   for (const [key, value] of source.messages) increment(target.messages, key, value);
   for (const [key, value] of source.tools) increment(target.tools, key, value);
   for (const [key, value] of source.models) increment(target.models, key, value);
+  for (const [key, value] of source.serviceTiers) increment(target.serviceTiers, key, value);
+  for (const [key, value] of source.reasoningEfforts) increment(target.reasoningEfforts, key, value);
   mergeTokenMaps(target.modelTokens, source.modelTokens);
   target.tokenEvents += source.tokenEvents ?? 0;
 
@@ -769,6 +807,8 @@ function materializeSession(parsed, start, end, skillRegistry) {
     tokens: emptyTokens(),
     modelTokens: new Map(),
     models: new Map(),
+    serviceTiers: new Map(),
+    reasoningEfforts: new Map(),
     skillEvidence: emptySkillEvidence(),
     tokenEvents: 0,
   };
@@ -798,8 +838,12 @@ async function readSession(filePath, start, end, skillRegistry = null) {
   const tokens = emptyTokens();
   const models = new Map();
   const modelTokens = new Map();
+  const serviceTiers = new Map();
+  const reasoningEfforts = new Map();
   const skillEvidence = emptySkillEvidence();
   let currentModel = null;
+  let currentServiceTier = null;
+  let currentReasoningEffort = null;
   let previousTotalUsage = emptyTokens();
   let tokenEvents = 0;
 
@@ -828,6 +872,13 @@ async function readSession(filePath, start, end, skillRegistry = null) {
     if (eventType === "session_meta") {
       Object.assign(meta, payload);
     } else if (eventType === "turn_context") {
+      currentReasoningEffort = payload.effort
+        ?? payload.collaboration_mode?.settings?.reasoning_effort
+        ?? currentReasoningEffort;
+      if (inRange) {
+        if (currentServiceTier) increment(serviceTiers, currentServiceTier);
+        if (currentReasoningEffort) increment(reasoningEfforts, currentReasoningEffort);
+      }
       if (payload.model) {
         currentModel = payload.model;
         if (inRange) {
@@ -835,6 +886,7 @@ async function readSession(filePath, start, end, skillRegistry = null) {
         }
       }
     } else if (eventType === "event_msg") {
+      currentServiceTier = payload.thread_settings?.service_tier ?? currentServiceTier;
       if (!inRange) {
         const totalUsage = payload.type === "token_count"
           ? payload.info?.total_token_usage
@@ -896,13 +948,16 @@ async function readSession(filePath, start, end, skillRegistry = null) {
     tokens,
     modelTokens,
     models,
+    serviceTiers,
+    reasoningEfforts,
     skillEvidence,
     tokenEvents,
   };
 }
 
-async function readSessions(files, start, end, skillRegistry, useCache) {
+async function readSessions(files, start, end, skillRegistry, useCache, requireInsights = false) {
   if (!useCache) {
+    console.error(`Cache bypassed: recalculating ${fmtInt(files.length)} session ${files.length === 1 ? "file" : "files"}.`);
     const sessions = [];
     for (const file of files) {
       const session = await readSession(file, start, end, skillRegistry);
@@ -917,6 +972,7 @@ async function readSessions(files, start, end, skillRegistry, useCache) {
   const sessions = [];
   const nextEntries = {};
   let changed = false;
+  const records = [];
 
   for (const file of files) {
     let stat;
@@ -927,13 +983,27 @@ async function readSessions(files, start, end, skillRegistry, useCache) {
     }
 
     const cached = cache.entries[file];
-    let parsed;
-    if (
+    const cacheHit = Boolean(
       cached
       && cached.mtimeMs === stat.mtimeMs
       && cached.size === stat.size
       && Object.hasOwn(cached, "parsed")
-    ) {
+      && (!requireInsights || cached.parsed == null || cached.parsed.insightsVersion === INSIGHTS_CACHE_VERSION)
+    );
+    records.push({ file, stat, cached, cacheHit });
+  }
+
+  const misses = records.filter((record) => !record.cacheHit).length;
+  const fileLabel = records.length === 1 ? "session file" : "session files";
+  if (misses === 0) {
+    console.error(`Cache hit: using ${fmtInt(records.length)} cached ${fileLabel}.`);
+  } else {
+    console.error(`Cache miss: recalculating ${fmtInt(misses)} of ${fmtInt(records.length)} ${fileLabel}.`);
+  }
+
+  for (const { file, stat, cached, cacheHit } of records) {
+    let parsed;
+    if (cacheHit) {
       parsed = cached.parsed ? deserializeParsedSession(cached.parsed) : null;
     } else {
       parsed = await parseSessionFile(file);
@@ -1595,7 +1665,36 @@ function plainReportHeader({ scope, start, end, sessions }) {
   ];
 }
 
-function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, repositories, providers, sources, models, costEstimate }) {
+function activityInsights(serviceTiers) {
+  const tierTotal = [...serviceTiers.values()].reduce((sum, count) => sum + count, 0);
+  const priorityTurns = serviceTiers.get("priority") ?? 0;
+  return {
+    fastModePercent: tierTotal > 0 ? Math.round((priorityTurns / tierTotal) * 100) : null,
+  };
+}
+
+function activityInsightsSection(lines, serviceTiers, reasoningEfforts, innerWidth) {
+  const insights = activityInsights(serviceTiers);
+  lines.push(boxedLine("Activity insights", innerWidth));
+  lines.push(infoLine("  Fast mode", insights.fastModePercent == null ? "unavailable" : `${insights.fastModePercent}%`, innerWidth));
+  lines.push(boxedBlank(innerWidth));
+  topSection(lines, "Reasoning efforts", reasoningEfforts, reasoningEfforts.size, "turns", innerWidth);
+}
+
+function plainActivityInsightsSection(serviceTiers, reasoningEfforts) {
+  const insights = activityInsights(serviceTiers);
+  return [
+    "Activity insights",
+    "",
+    `Fast mode            ${insights.fastModePercent == null ? "unavailable" : `${insights.fastModePercent}%`}`,
+    "",
+    ...plainTopSection("Reasoning efforts", reasoningEfforts, reasoningEfforts.size, "turns"),
+    "",
+    "Locally derived from turn_context records with known settings.",
+  ];
+}
+
+function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, repositories, providers, sources, models, serviceTiers, reasoningEfforts, costEstimate }) {
   const width = terminalWidth();
   const innerWidth = width - 4;
   const totalMessages = (messages.get("user") ?? 0) + (messages.get("assistant") ?? 0);
@@ -1620,6 +1719,8 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   lines.push(infoLine("Busiest day", `${busiestDay[0]} (${fmtInt(busiestDay[1].messages)} messages)`, innerWidth));
   lines.push(boxedBlank(innerWidth));
 
+  activityInsightsSection(lines, serviceTiers, reasoningEfforts, innerWidth);
+  lines.push(boxedBlank(innerWidth));
   weeklyActivitySection(lines, sessions, innerWidth);
   lines.push(boxedBlank(innerWidth));
   if (scope.type === "global") {
@@ -1645,7 +1746,7 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   return lines.join("\n");
 }
 
-function renderPlainSections({ args, scope, start, end, sessions, daySessions, tools, projects, repositories, providers, sources, models, costEstimate, skillAnalysis }) {
+function renderPlainSections({ args, scope, start, end, sessions, daySessions, tools, projects, repositories, providers, sources, models, serviceTiers, reasoningEfforts, costEstimate, skillAnalysis }) {
   const sections = [plainReportHeader({ scope, start, end, sessions })];
   for (const section of args.sections) {
     if (section === "weekly") {
@@ -1670,6 +1771,8 @@ function renderPlainSections({ args, scope, start, end, sessions, daySessions, t
       sections.push(plainTopSection("Providers", providers, Math.min(args.top, 3), "sessions"));
     } else if (section === "costs") {
       sections.push(plainCostSection(costEstimate, args.top));
+    } else if (section === "insights") {
+      sections.push(plainActivityInsightsSection(serviceTiers, reasoningEfforts));
     } else if (section === "skills") {
       sections.push(plainSkillsSection(skillAnalysis, args.top));
     }
@@ -1680,14 +1783,27 @@ function renderPlainSections({ args, scope, start, end, sessions, daySessions, t
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.clearCache) {
+    const removed = await clearSessionCaches();
+    console.log(`Cleared ${fmtInt(removed)} Codex Report cache ${removed === 1 ? "file" : "files"}.`);
+    return;
+  }
   let scope = resolveScope(args.global);
   const start = parseDate(args.from);
   const end = parseDate(args.to ?? localDay(new Date()), { endOfDay: !args.to?.includes("T") });
   const wantsSkills = args.sections.includes("skills");
+  const wantsInsights = args.sections.length === 0 || args.sections.includes("insights");
   const skillRegistry = wantsSkills ? await discoverSkills(scope) : null;
   const files = await sessionFiles(SESSIONS_DIR);
   const cacheSupportsRange = !args.from?.includes("T") && !args.to?.includes("T");
-  const allSessions = (await readSessions(files, start, end, skillRegistry, args.cache && cacheSupportsRange))
+  const allSessions = (await readSessions(
+    files,
+    start,
+    end,
+    skillRegistry,
+    args.cache && cacheSupportsRange,
+    wantsInsights,
+  ))
     .filter((session) => hasActivity(session));
 
   const sessions = [];
@@ -1722,6 +1838,8 @@ async function main() {
   const sources = new Map();
   const models = new Map();
   const modelTokens = new Map();
+  const serviceTiers = new Map();
+  const reasoningEfforts = new Map();
 
   for (const session of sessions) {
     const day = localDay(session.firstTs);
@@ -1738,6 +1856,8 @@ async function main() {
     for (const [key, value] of session.messages) increment(messages, key, value);
     for (const [key, value] of session.tools) increment(tools, key, value);
     for (const [key, value] of session.models) increment(models, key, value);
+    for (const [key, value] of session.serviceTiers) increment(serviceTiers, key, value);
+    for (const [key, value] of session.reasoningEfforts) increment(reasoningEfforts, key, value);
     mergeTokenMaps(modelTokens, session.modelTokens);
     increment(projects, session.cwd);
     increment(providers, session.provider);
@@ -1766,6 +1886,8 @@ async function main() {
     sources,
     models,
     modelTokens,
+    serviceTiers,
+    reasoningEfforts,
     costEstimate,
     skillAnalysis,
   };

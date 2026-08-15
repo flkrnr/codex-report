@@ -67,12 +67,19 @@ Bypass the local parsed-session cache:
 codex-report --no-cache
 ```
 
+Delete all Codex Report session caches and exit:
+
+```bash
+codex-report --clear-cache
+```
+
 Print only selected sections without the boxed summary:
 
 ```bash
 codex-report --models
 codex-report --models --tools
 codex-report --costs
+codex-report --insights
 codex-report --skills
 codex-report --global --repositories
 codex-report --global --monthly
@@ -80,8 +87,8 @@ codex-report --global --weekly --activity --top 5
 ```
 
 Available section flags: `--weekly`, `--monthly`, `--projects`, `--repositories`,
-`--models`, `--tools`, `--activity`, `--sources`, `--providers`, `--costs`, and
-`--skills`.
+`--models`, `--tools`, `--activity`, `--sources`, `--providers`, `--costs`,
+`--insights`, and `--skills`.
 
 The activity and project views answer different questions:
 
@@ -91,6 +98,8 @@ The activity and project views answer different questions:
 - `--projects` groups sessions by their exact working directory.
 - `--repositories` consolidates Git worktrees by repository and retains
   non-Git working directories as separate entries.
+- `--insights` reports the Fast Mode share and all reasoning-effort usage from
+  locally recorded turns whose logs include those settings.
 
 API cost estimation is experimental and should be treated as an approximation,
 not billing data. For details on how estimates are calculated, see
@@ -114,6 +123,14 @@ $ codex-report --global
 │             265M tokens in unpriced models                                           │
 │ Active days 202 · longest streak 28 days                                             │
 │ Busiest day 2026-06-23 (2,796 messages)                                              │
+│                                                                                      │
+│ Activity insights                                                                    │
+│   Fast mode  70%                                                                      │
+│                                                                                      │
+│ Reasoning efforts                                                                    │
+│   medium                                          7,128 turns  ███████░░░░░░░░░  41% │
+│   high                                            6,433 turns  ██████░░░░░░░░░░  37% │
+│   low                                             3,823 turns  ████░░░░░░░░░░░░  22% │
 │                                                                                      │
 │ Weekly activity                                                                      │
 │   Mon  ███████░░░░░░░░░░░░░░░░░░░░░    5,892 messages | 884M tok                     │
@@ -185,6 +202,9 @@ $ codex-report --global
   invalidates its entry; date ranges and the current skill registry are applied
   after loading the cache.
 - Token totals are based on Codex `token_count` events in local session logs.
+- Fast Mode and reasoning-effort insights are locally derived from
+  `turn_context` records with known settings. They may differ from the Codex
+  profile dashboard because its exact aggregation rules are not public.
 - API cost totals are estimates based on OpenAI standard text-token list
   prices for each recognized model. Cached input is billed at the cached-input
   rate, uncached input at the input rate, and output at the output rate.
