@@ -3,11 +3,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
-const SESSION_CACHE_VERSION = 5;
-const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v5.json");
+const SESSION_CACHE_VERSION = 6;
+const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v6.json");
+const execFileAsync = promisify(execFile);
 const SKILL_MD = "SKILL.md";
 const SKILL_READ_COMMAND_RE = /(^|[;&|]\s*|["']\s*)\s*(?:[^\s"';&|]+[\\/])?(sed|cat|nl|wc|awk|head|tail)\b/;
 const SKILL_PATH_RE = /((?:~[\\/]|[A-Za-z]:[\\/]|\/)[^\n\r'"`]*?[\\/]SKILL\.md)/g;
@@ -48,6 +51,7 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SECTION_FLAGS = new Map([
   ["--weekly", "weekly"],
   ["--projects", "projects"],
+  ["--repositories", "repositories"],
   ["--models", "models"],
   ["--tools", "tools"],
   ["--activity", "activity"],
@@ -164,6 +168,94 @@ function isInsideFolder(cwd, folderRoot) {
 
   const relative = path.relative(folderRoot, cwd);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function normalizeRepositoryUrl(value) {
+  const raw = String(value ?? "").trim().replace(/\/$/, "").replace(/\.git$/, "");
+  if (!raw) {
+    return null;
+  }
+
+  const scp = /^(?:[^@\s]+@)?([^:/\s]+):(.+)$/.exec(raw);
+  if (scp && !raw.includes("://") && !/^[A-Za-z]:[\\/]/.test(raw)) {
+    return `${scp[1].toLowerCase()}/${scp[2].replace(/^\//, "")}`;
+  }
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol === "file:") {
+      return decodeURIComponent(url.pathname);
+    }
+    return `${url.hostname.toLowerCase()}${url.pathname}`.replace(/\/$/, "").replace(/\.git$/, "");
+  } catch {
+    return path.isAbsolute(raw) ? path.normalize(raw) : raw;
+  }
+}
+
+async function gitOutput(cwd, args) {
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", cwd, ...args], {
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024,
+    });
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function repositoryIdentity(session, cwdCache) {
+  const recordedRepository = normalizeRepositoryUrl(session.repositoryUrl);
+  if (recordedRepository) {
+    return { key: `remote:${recordedRepository}`, label: recordedRepository };
+  }
+
+  const cwd = session.cwd;
+  if (cwdCache.has(cwd)) {
+    return cwdCache.get(cwd);
+  }
+
+  let identity = null;
+  if (cwd !== "(unknown)" && fs.existsSync(cwd)) {
+    const remote = normalizeRepositoryUrl(await gitOutput(cwd, ["config", "--get", "remote.origin.url"]));
+    if (remote) {
+      identity = { key: `remote:${remote}`, label: remote };
+    } else {
+      const commonDir = await gitOutput(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+      if (commonDir) {
+        const normalizedCommonDir = path.normalize(commonDir);
+        const repositoryRoot = path.basename(normalizedCommonDir) === ".git"
+          ? path.dirname(normalizedCommonDir)
+          : normalizedCommonDir;
+        identity = { key: `git:${normalizedCommonDir}`, label: shortPath(repositoryRoot) };
+      }
+    }
+  }
+
+  identity ??= {
+    key: `directory:${cwd === "(unknown)" ? cwd : path.normalize(cwd)}`,
+    label: cwd === "(unknown)" ? cwd : shortPath(path.normalize(cwd)),
+  };
+  cwdCache.set(cwd, identity);
+  return identity;
+}
+
+async function aggregateRepositories(sessions) {
+  const identities = new Map();
+  const cwdCache = new Map();
+  for (const session of sessions) {
+    const identity = await repositoryIdentity(session, cwdCache);
+    if (!identities.has(identity.key)) {
+      identities.set(identity.key, { label: identity.label, count: 0 });
+    }
+    identities.get(identity.key).count += 1;
+  }
+
+  const repositories = new Map();
+  for (const { label: repositoryLabel, count } of identities.values()) {
+    increment(repositories, repositoryLabel, count);
+  }
+  return repositories;
 }
 
 function increment(map, key, amount = 1) {
@@ -634,6 +726,7 @@ async function parseSessionFile(filePath) {
     path: filePath,
     id: meta.id ?? path.basename(filePath, ".jsonl"),
     cwd: label(meta.cwd),
+    repositoryUrl: typeof meta.git?.repository_url === "string" ? meta.git.repository_url : null,
     provider: label(meta.model_provider),
     source: label(meta.originator ?? meta.source),
     days,
@@ -667,6 +760,7 @@ function materializeSession(parsed, start, end, skillRegistry) {
     firstTs: null,
     lastTs: null,
     cwd: parsed.cwd,
+    repositoryUrl: parsed.repositoryUrl,
     provider: parsed.provider,
     source: parsed.source,
     messages: new Map(),
@@ -793,6 +887,7 @@ async function readSession(filePath, start, end, skillRegistry = null) {
     firstTs,
     lastTs,
     cwd: label(meta.cwd),
+    repositoryUrl: typeof meta.git?.repository_url === "string" ? meta.git.repository_url : null,
     provider: label(meta.model_provider),
     source: label(meta.originator ?? meta.source),
     messages,
@@ -1486,7 +1581,7 @@ function plainReportHeader({ scope, start, end, sessions }) {
   ];
 }
 
-function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, providers, sources, models, costEstimate }) {
+function renderReport({ args, scope, start, end, sessions, daySessions, activeDays, tokens, messages, tools, projects, repositories, providers, sources, models, costEstimate }) {
   const width = terminalWidth();
   const innerWidth = width - 4;
   const totalMessages = (messages.get("user") ?? 0) + (messages.get("assistant") ?? 0);
@@ -1498,6 +1593,7 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   lines.push(infoLine("Sessions", fmtInt(sessions.length), innerWidth));
   if (scope.type === "global") {
     lines.push(infoLine("Projects", fmtInt(projects.size), innerWidth));
+    lines.push(infoLine("Repos/dirs", fmtInt(repositories.size), innerWidth));
   }
   lines.push(infoLine("Messages", `${fmtInt(totalMessages)} (${fmtInt(messages.get("user") ?? 0)} user, ${fmtInt(messages.get("assistant") ?? 0)} assistant)`, innerWidth));
   lines.push(infoLine("Tokens", `${fmtInt(tokens.total_tokens)} total`, innerWidth));
@@ -1513,7 +1609,7 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   weeklyActivitySection(lines, sessions, innerWidth);
   lines.push(boxedBlank(innerWidth));
   if (scope.type === "global") {
-    topSection(lines, "Top projects", projects, args.top, "sessions", innerWidth);
+    topSection(lines, "Top repositories and directories", repositories, args.top, "sessions", innerWidth);
     lines.push(boxedBlank(innerWidth));
   }
 
@@ -1533,7 +1629,7 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   return lines.join("\n");
 }
 
-function renderPlainSections({ args, scope, start, end, sessions, daySessions, tools, projects, providers, sources, models, costEstimate, skillAnalysis }) {
+function renderPlainSections({ args, scope, start, end, sessions, daySessions, tools, projects, repositories, providers, sources, models, costEstimate, skillAnalysis }) {
   const sections = [plainReportHeader({ scope, start, end, sessions })];
   for (const section of args.sections) {
     if (section === "weekly") {
@@ -1542,6 +1638,8 @@ function renderPlainSections({ args, scope, start, end, sessions, daySessions, t
       sections.push(scope.type === "global"
         ? plainTopSection("Top projects", projects, args.top, "sessions")
         : ["Top projects", "", "current folder scope; use --global to compare projects"]);
+    } else if (section === "repositories") {
+      sections.push(plainTopSection("Repositories and directories", repositories, args.top, "sessions"));
     } else if (section === "models") {
       sections.push(plainTopSection("Top models", models, args.top, "turns"));
     } else if (section === "tools") {
@@ -1594,6 +1692,8 @@ async function main() {
     sessions.push(...allSessions);
   }
 
+  const repositories = await aggregateRepositories(sessions);
+
   const daySessions = new Map();
   const activeDays = new Set();
   const tokens = emptyTokens();
@@ -1643,6 +1743,7 @@ async function main() {
     messages,
     tools,
     projects,
+    repositories,
     providers,
     sources,
     models,
