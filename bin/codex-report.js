@@ -50,6 +50,7 @@ const BOX_MAX_WIDTH = 110;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SECTION_FLAGS = new Map([
   ["--weekly", "weekly"],
+  ["--monthly", "monthly"],
   ["--projects", "projects"],
   ["--repositories", "repositories"],
   ["--models", "models"],
@@ -62,7 +63,7 @@ const SECTION_FLAGS = new Map([
 ]);
 
 function usage() {
-  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--no-cache] [--weekly] [--projects] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--skills]");
+  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--no-cache] [--weekly] [--monthly] [--projects] [--repositories] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--skills]");
 }
 
 function parseArgs(argv) {
@@ -1509,6 +1510,19 @@ function plainActivitySection(title, map, limit) {
   return lines;
 }
 
+function monthlyActivity(daySessions) {
+  const months = new Map();
+  for (const [day, activity] of daySessions) {
+    const month = day.slice(0, 7);
+    if (!months.has(month)) {
+      months.set(month, { messages: 0, tokens: 0 });
+    }
+    months.get(month).messages += activity.messages;
+    months.get(month).tokens += activity.tokens;
+  }
+  return months;
+}
+
 function weekdayIndex(date) {
   return (date.getDay() + 6) % 7;
 }
@@ -1621,6 +1635,8 @@ function renderReport({ args, scope, start, end, sessions, daySessions, activeDa
   lines.push(boxedBlank(innerWidth));
   activitySection(lines, "Activity by day", daySessions, args.top, innerWidth);
   lines.push(boxedBlank(innerWidth));
+  activitySection(lines, "Activity by month", monthlyActivity(daySessions), args.top, innerWidth);
+  lines.push(boxedBlank(innerWidth));
   topSection(lines, "Sources", sources, Math.min(args.top, 3), "sessions", innerWidth);
   lines.push(boxedBlank(innerWidth));
   topSection(lines, "Providers", providers, Math.min(args.top, 3), "sessions", innerWidth);
@@ -1634,6 +1650,8 @@ function renderPlainSections({ args, scope, start, end, sessions, daySessions, t
   for (const section of args.sections) {
     if (section === "weekly") {
       sections.push(plainWeeklyActivitySection(sessions));
+    } else if (section === "monthly") {
+      sections.push(plainActivitySection("Activity by month", monthlyActivity(daySessions), args.top));
     } else if (section === "projects") {
       sections.push(scope.type === "global"
         ? plainTopSection("Top projects", projects, args.top, "sessions")
