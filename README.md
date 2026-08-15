@@ -125,7 +125,7 @@ $ codex-report --global
 │ Busiest day 2026-06-23 (2,796 messages)                                              │
 │                                                                                      │
 │ Activity insights                                                                    │
-│   Fast mode  70%                                                                      │
+│   Fast mode  70%                                                                     │
 │                                                                                      │
 │ Reasoning efforts                                                                    │
 │   medium                                          7,128 turns  ███████░░░░░░░░░  41% │
