@@ -33,7 +33,7 @@ test("clears every Codex Report session cache and leaves unrelated files", async
 
   const cacheDir = path.join(home, ".codex", "cache");
   const oldCache = path.join(cacheDir, "codex-report-sessions-v1.json");
-  const currentCache = path.join(cacheDir, "codex-report-sessions-v6.json");
+  const currentCache = path.join(cacheDir, "codex-report-sessions-v7.json");
   const unrelated = path.join(cacheDir, "other-cache.json");
   await fs.mkdir(cacheDir, { recursive: true });
   await Promise.all([
@@ -108,7 +108,7 @@ test("counts skill evidence and reuses one cache entry across date ranges", asyn
   assert.match(first, /\$skill mentions\s+2/);
   assert.match(first, /demo\s+2 reads/);
 
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v6.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v7.json");
   const firstCache = JSON.parse(await fs.readFile(cachePath, "utf8"));
   assert.equal(Object.keys(firstCache.entries).length, 1);
 
@@ -149,7 +149,7 @@ test("bypasses day cache for precise timestamp ranges", async (t) => {
     "2026-08-14T12:00:00Z",
   ]);
   assert.match(output, /gpt-5\s+1 turns/);
-  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v6.json")));
+  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v7.json")));
 });
 
 test("reuses legacy cache for reports that do not request insights", async (t) => {
@@ -183,7 +183,7 @@ test("reuses legacy cache for reports that do not request insights", async (t) =
   await fs.writeFile(firstSessionPath, sessionLines);
   await fs.writeFile(secondSessionPath, sessionLines.replace("legacy-cache", "legacy-cache-2"));
 
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v6.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v7.json");
   const range = ["--global", "--from", "2026-08-14", "--to", "2026-08-14"];
   await runReport(home, [...range, "--activity"]);
   const legacyCache = JSON.parse(await fs.readFile(cachePath, "utf8"));
@@ -249,6 +249,78 @@ test("cached day summaries preserve token deltas across midnight", async (t) => 
   const uncached = await runReport(home, [...args, "--no-cache"]);
   assert.equal(cached, uncached);
   assert.match(cached, /50 in · 40 cached · 5 out/);
+});
+
+test("does not count replayed parent history in forked sessions", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  const usage = (inputTokens, outputTokens) => ({
+    input_tokens: inputTokens,
+    cached_input_tokens: 0,
+    output_tokens: outputTokens,
+    reasoning_output_tokens: 0,
+    total_tokens: inputTokens + outputTokens,
+  });
+  const parentEvents = [
+    event("2026-08-14T08:00:00Z", "session_meta", { id: "parent", cwd: REPO_ROOT }),
+    event("2026-08-14T08:01:00Z", "turn_context", { turn_id: "parent-turn-1", model: "gpt-5" }),
+    event("2026-08-14T08:02:00Z", "event_msg", { type: "user_message", message: "first" }),
+    event("2026-08-14T08:03:00Z", "event_msg", {
+      type: "token_count",
+      info: { total_token_usage: usage(100, 10), last_token_usage: usage(100, 10) },
+    }),
+    event("2026-08-14T08:04:00Z", "turn_context", { turn_id: "parent-turn-2", model: "gpt-5" }),
+    event("2026-08-14T08:05:00Z", "event_msg", { type: "agent_message", message: "second" }),
+    event("2026-08-14T08:06:00Z", "event_msg", {
+      type: "token_count",
+      info: { total_token_usage: usage(200, 20), last_token_usage: usage(100, 10) },
+    }),
+  ];
+  const replayedEvents = parentEvents.map((line) => {
+    const replayed = JSON.parse(line);
+    replayed.timestamp = "2026-08-14T09:00:00Z";
+    return JSON.stringify(replayed);
+  });
+  const forkEvents = [
+    event("2026-08-14T09:00:00Z", "session_meta", {
+      id: "fork",
+      session_id: "parent",
+      forked_from_id: "parent",
+      cwd: REPO_ROOT,
+    }),
+    ...replayedEvents,
+    event("2026-08-14T09:01:00Z", "turn_context", { turn_id: "fork-turn-1", model: "gpt-5" }),
+    event("2026-08-14T09:02:00Z", "event_msg", { type: "user_message", message: "forked" }),
+    event("2026-08-14T09:03:00Z", "event_msg", { type: "agent_message", message: "reply" }),
+    event("2026-08-14T09:04:00Z", "event_msg", {
+      type: "token_count",
+      info: { total_token_usage: usage(300, 30), last_token_usage: usage(100, 10) },
+    }),
+  ];
+
+  await fs.writeFile(path.join(sessionDir, "2026-08-14-08-parent.jsonl"), parentEvents.join("\n"));
+  await fs.writeFile(path.join(sessionDir, "2026-08-14-09-fork.jsonl"), forkEvents.join("\n"));
+
+  const args = ["--global", "--from", "2026-08-14", "--to", "2026-08-14"];
+  const cached = await runReport(home, args);
+  const uncached = await runReport(home, [...args, "--no-cache"]);
+  assert.equal(cached, uncached);
+  assert.match(cached, /Messages\s+4 \(2 user, 2 assistant\)/);
+  assert.match(cached, /Tokens\s+330 total/);
+
+  const forkOnly = await runReport(home, [
+    "--global",
+    "--from",
+    "2026-08-14T08:30:00Z",
+    "--to",
+    "2026-08-14T10:00:00Z",
+  ]);
+  assert.match(forkOnly, /Sessions\s+1/);
+  assert.match(forkOnly, /Messages\s+2 \(1 user, 1 assistant\)/);
+  assert.match(forkOnly, /Tokens\s+110 total/);
 });
 
 test("reports fast mode and every reasoning effort once per turn", async (t) => {

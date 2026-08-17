@@ -8,8 +8,8 @@ import { promisify } from "node:util";
 
 const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
-const SESSION_CACHE_VERSION = 6;
-const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v6.json");
+const SESSION_CACHE_VERSION = 7;
+const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v7.json");
 const INSIGHTS_CACHE_VERSION = 2;
 const execFileAsync = promisify(execFile);
 const SKILL_MD = "SKILL.md";
@@ -380,6 +380,7 @@ function deserializeDailySession(value) {
 function serializeParsedSession(session) {
   return {
     ...session,
+    turnIds: [...session.turnIds],
     days: mapEntries(new Map(
       [...session.days].map(([day, value]) => [day, serializeDailySession(value)]),
     )),
@@ -389,6 +390,7 @@ function serializeParsedSession(session) {
 function deserializeParsedSession(value) {
   return {
     ...value,
+    turnIds: new Set(value.turnIds ?? []),
     days: new Map(
       (value.days ?? []).map(([day, session]) => [day, deserializeDailySession(session)]),
     ),
@@ -682,13 +684,17 @@ function dailySessionFor(days, ts) {
   return session;
 }
 
-async function parseSessionFile(filePath) {
+async function parseSessionFile(filePath, turnIdsBySessionId) {
   const meta = {};
   const days = new Map();
+  const turnIds = new Set();
   let currentModel = null;
   let currentServiceTier = null;
   let currentReasoningEffort = null;
   let previousTotalUsage = emptyTokens();
+  let inheritedTurnIds = null;
+  let replayingForkHistory = false;
+  let hasCanonicalMeta = false;
   const stream = fs.createReadStream(filePath, { encoding: "utf8" });
   const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
@@ -704,8 +710,38 @@ async function parseSessionFile(filePath) {
     const eventType = event.type;
     const payload = event.payload ?? {};
 
-    if (eventType === "session_meta") {
+    if (eventType === "session_meta" && !hasCanonicalMeta) {
       Object.assign(meta, payload);
+      hasCanonicalMeta = true;
+      inheritedTurnIds = payload.forked_from_id
+        ? turnIdsBySessionId.get(payload.forked_from_id) ?? null
+        : null;
+      replayingForkHistory = Boolean(inheritedTurnIds?.size);
+    }
+
+    if (eventType === "turn_context" && payload.turn_id) {
+      turnIds.add(payload.turn_id);
+      if (replayingForkHistory && !inheritedTurnIds.has(payload.turn_id)) {
+        replayingForkHistory = false;
+      }
+    }
+
+    if (replayingForkHistory) {
+      if (eventType === "turn_context") {
+        currentReasoningEffort = payload.effort
+          ?? payload.collaboration_mode?.settings?.reasoning_effort
+          ?? currentReasoningEffort;
+        currentModel = payload.model ?? currentModel;
+      } else if (eventType === "event_msg") {
+        currentServiceTier = payload.thread_settings?.service_tier ?? currentServiceTier;
+        const totalUsage = payload.type === "token_count"
+          ? payload.info?.total_token_usage
+          : null;
+        if (totalUsage) {
+          previousTotalUsage = totalUsage;
+        }
+      }
+      continue;
     }
 
     const daySession = dailySessionFor(days, ts);
@@ -761,6 +797,8 @@ async function parseSessionFile(filePath) {
   return {
     path: filePath,
     id: meta.id ?? path.basename(filePath, ".jsonl"),
+    forkedFromId: meta.forked_from_id ?? null,
+    turnIds,
     cwd: label(meta.cwd),
     repositoryUrl: typeof meta.git?.repository_url === "string" ? meta.git.repository_url : null,
     provider: label(meta.model_provider),
@@ -829,8 +867,9 @@ function materializeSession(parsed, start, end, skillRegistry) {
   return session.firstTs ? session : null;
 }
 
-async function readSession(filePath, start, end, skillRegistry = null) {
+async function readSession(filePath, start, end, skillRegistry, turnIdsBySessionId) {
   const meta = {};
+  const turnIds = new Set();
   let firstTs = null;
   let lastTs = null;
   const messages = new Map();
@@ -845,6 +884,9 @@ async function readSession(filePath, start, end, skillRegistry = null) {
   let currentServiceTier = null;
   let currentReasoningEffort = null;
   let previousTotalUsage = emptyTokens();
+  let inheritedTurnIds = null;
+  let replayingForkHistory = false;
+  let hasCanonicalMeta = false;
   let tokenEvents = 0;
 
   const stream = fs.createReadStream(filePath, { encoding: "utf8" });
@@ -861,17 +903,49 @@ async function readSession(filePath, start, end, skillRegistry = null) {
     const ts = parseTimestamp(event.timestamp);
     const inRange = !ts || !((start && ts < start) || ts > end);
 
+    const eventType = event.type;
+    const payload = event.payload ?? {};
+
+    if (eventType === "session_meta" && !hasCanonicalMeta) {
+      Object.assign(meta, payload);
+      hasCanonicalMeta = true;
+      inheritedTurnIds = payload.forked_from_id
+        ? turnIdsBySessionId.get(payload.forked_from_id) ?? null
+        : null;
+      replayingForkHistory = Boolean(inheritedTurnIds?.size);
+    }
+
+    if (eventType === "turn_context" && payload.turn_id) {
+      turnIds.add(payload.turn_id);
+      if (replayingForkHistory && !inheritedTurnIds.has(payload.turn_id)) {
+        replayingForkHistory = false;
+      }
+    }
+
+    if (replayingForkHistory) {
+      if (eventType === "turn_context") {
+        currentReasoningEffort = payload.effort
+          ?? payload.collaboration_mode?.settings?.reasoning_effort
+          ?? currentReasoningEffort;
+        currentModel = payload.model ?? currentModel;
+      } else if (eventType === "event_msg") {
+        currentServiceTier = payload.thread_settings?.service_tier ?? currentServiceTier;
+        const totalUsage = payload.type === "token_count"
+          ? payload.info?.total_token_usage
+          : null;
+        if (totalUsage) {
+          previousTotalUsage = totalUsage;
+        }
+      }
+      continue;
+    }
+
     if (ts && inRange) {
       firstTs = firstTs == null || ts < firstTs ? ts : firstTs;
       lastTs = lastTs == null || ts > lastTs ? ts : lastTs;
     }
 
-    const eventType = event.type;
-    const payload = event.payload ?? {};
-
-    if (eventType === "session_meta") {
-      Object.assign(meta, payload);
-    } else if (eventType === "turn_context") {
+    if (eventType === "turn_context") {
       currentReasoningEffort = payload.effort
         ?? payload.collaboration_mode?.settings?.reasoning_effort
         ?? currentReasoningEffort;
@@ -930,6 +1004,10 @@ async function readSession(filePath, start, end, skillRegistry = null) {
     }
   }
 
+  if (meta.id) {
+    turnIdsBySessionId.set(meta.id, turnIds);
+  }
+
   if (!firstTs) {
     return null;
   }
@@ -937,6 +1015,8 @@ async function readSession(filePath, start, end, skillRegistry = null) {
   return {
     path: filePath,
     id: meta.id ?? path.basename(filePath, ".jsonl"),
+    forkedFromId: meta.forked_from_id ?? null,
+    turnIds,
     firstTs,
     lastTs,
     cwd: label(meta.cwd),
@@ -956,12 +1036,14 @@ async function readSession(filePath, start, end, skillRegistry = null) {
 }
 
 async function readSessions(files, start, end, skillRegistry, useCache, requireInsights = false) {
+  const turnIdsBySessionId = new Map();
   if (!useCache) {
     console.error(`Cache bypassed: recalculating ${fmtInt(files.length)} session ${files.length === 1 ? "file" : "files"}.`);
     const sessions = [];
     for (const file of files) {
-      const session = await readSession(file, start, end, skillRegistry);
+      const session = await readSession(file, start, end, skillRegistry, turnIdsBySessionId);
       if (session) {
+        turnIdsBySessionId.set(session.id, session.turnIds);
         sessions.push(session);
       }
     }
@@ -1006,8 +1088,12 @@ async function readSessions(files, start, end, skillRegistry, useCache, requireI
     if (cacheHit) {
       parsed = cached.parsed ? deserializeParsedSession(cached.parsed) : null;
     } else {
-      parsed = await parseSessionFile(file);
+      parsed = await parseSessionFile(file, turnIdsBySessionId);
       changed = true;
+    }
+
+    if (parsed) {
+      turnIdsBySessionId.set(parsed.id, parsed.turnIds);
     }
 
     nextEntries[file] = {
