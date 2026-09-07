@@ -69,8 +69,12 @@ and model pages, including [GPT-5.6 Sol](https://developers.openai.com/api/docs/
 [Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra), and
 [Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
 
+GPT-6 Astra pricing was added and checked on 2026-09-07 against its official
+[model page](https://developers.openai.com/api/docs/models/gpt-6-astra).
+
 | Model names | Input | Cached input | Output |
 | --- | ---: | ---: | ---: |
+| `gpt-6-astra` | $10.00 | $1.00 | $50.00 |
 | `gpt-5.6`, `gpt-5.6-sol` | $5.00 | $0.50 | $30.00 |
 | `gpt-5.6-terra` | $2.00 | $0.20 | $12.00 |
 | `gpt-5.6-luna` | $0.20 | $0.02 | $1.20 |
@@ -127,7 +131,7 @@ Subscription quota, usage dashboard charts, included usage, credits, discounts,
 batch pricing, regional processing differences, and non-token tool charges are
 not included.
 
-GPT-5.6 estimates use standard processing prices. The report can identify many
+GPT-6 Astra and GPT-5.6 estimates use standard processing prices. The report can identify many
 Fast-mode turns from local `service_tier` settings, but the cost estimate does
 not apply Fast-mode pricing. Cache writes and individual requests over the
 272K-input-token long-context threshold are also not identified reliably.

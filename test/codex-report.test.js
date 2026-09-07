@@ -392,13 +392,13 @@ test("reports fast mode and every reasoning effort once per turn", async (t) => 
   assert.match(full, /Reasoning efforts/);
 });
 
-test("applies official standard prices for GPT-5.6 models", async (t) => {
+test("applies official standard prices for GPT-6 Astra and GPT-5.6 models", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
   t.after(() => fs.rm(home, { recursive: true, force: true }));
 
   const sessionDir = path.join(home, ".codex", "sessions");
   await fs.mkdir(sessionDir, { recursive: true });
-  const models = ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
+  const models = ["gpt-6-astra", "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
   for (const [index, model] of models.entries()) {
     await fs.writeFile(path.join(sessionDir, `${index}.jsonl`), [
       event("2026-08-14T08:00:00Z", "session_meta", { id: `pricing-${index}`, cwd: REPO_ROOT }),
@@ -419,11 +419,13 @@ test("applies official standard prices for GPT-5.6 models", async (t) => {
   }
 
   const output = await runReport(home, ["--global", "--costs", "--from", "2026-08-14", "--to", "2026-08-14"]);
+  assert.match(output, /gpt-6-astra\s+\$61\.00/);
   assert.match(output, /gpt-5\.6\s+\$35\.50/);
   assert.match(output, /gpt-5\.6-sol\s+\$35\.50/);
   assert.match(output, /gpt-5\.6-terra\s+\$14\.20/);
   assert.match(output, /gpt-5\.6-luna\s+\$1\.420/);
-  assert.match(output, /Total estimated API cost: \$86\.62/);
+  assert.match(output, /Total estimated API cost: \$148\n/);
+  assert.doesNotMatch(output, /Unpriced models:/);
 });
 
 test("groups remote worktrees, local repositories, and non-Git directories", async (t) => {
