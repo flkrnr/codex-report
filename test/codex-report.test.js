@@ -33,7 +33,7 @@ test("clears every Codex Report session cache and leaves unrelated files", async
 
   const cacheDir = path.join(home, ".codex", "cache");
   const oldCache = path.join(cacheDir, "codex-report-sessions-v1.json");
-  const currentCache = path.join(cacheDir, "codex-report-sessions-v7.json");
+  const currentCache = path.join(cacheDir, "codex-report-sessions-v8.json");
   const unrelated = path.join(cacheDir, "other-cache.json");
   await fs.mkdir(cacheDir, { recursive: true });
   await Promise.all([
@@ -108,7 +108,7 @@ test("counts skill evidence and reuses one cache entry across date ranges", asyn
   assert.match(first, /\$skill mentions\s+2/);
   assert.match(first, /demo\s+2 reads/);
 
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v7.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v8.json");
   const firstCache = JSON.parse(await fs.readFile(cachePath, "utf8"));
   assert.equal(Object.keys(firstCache.entries).length, 1);
 
@@ -149,7 +149,7 @@ test("bypasses day cache for precise timestamp ranges", async (t) => {
     "2026-08-14T12:00:00Z",
   ]);
   assert.match(output, /gpt-5\s+1 turns/);
-  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v7.json")));
+  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v8.json")));
 });
 
 test("reuses legacy cache for reports that do not request insights", async (t) => {
@@ -183,7 +183,7 @@ test("reuses legacy cache for reports that do not request insights", async (t) =
   await fs.writeFile(firstSessionPath, sessionLines);
   await fs.writeFile(secondSessionPath, sessionLines.replace("legacy-cache", "legacy-cache-2"));
 
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v7.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v8.json");
   const range = ["--global", "--from", "2026-08-14", "--to", "2026-08-14"];
   await runReport(home, [...range, "--activity"]);
   const legacyCache = JSON.parse(await fs.readFile(cachePath, "utf8"));
@@ -486,4 +486,69 @@ test("aggregates activity by month", async (t) => {
   const output = await runReport(home, ["--global", "--monthly", "--from", "2026-01-01", "--to", "2026-02-28"]);
   assert.match(output, /2026-01\s+2 msg/);
   assert.match(output, /2026-02\s+1 msg/);
+});
+
+test("counts completed message items alongside legacy messages without counting response copies", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  await fs.writeFile(path.join(sessionDir, "session.jsonl"), [
+    event("2026-08-14T08:00:00Z", "session_meta", { id: "completed-messages", cwd: REPO_ROOT }),
+    event("2026-08-14T08:01:00Z", "response_item", { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] }),
+    event("2026-08-14T08:01:00Z", "event_msg", { type: "item_completed", item: { type: "UserMessage", id: "user-1", content: [{ type: "text", text: "hello" }] } }),
+    event("2026-08-14T08:02:00Z", "event_msg", { type: "item_completed", item: { type: "AgentMessage", id: "agent-1", content: [{ type: "Text", text: "hi" }] } }),
+    event("2026-08-14T08:02:00Z", "response_item", { type: "message", role: "assistant", content: [{ type: "output_text", text: "hi" }] }),
+    event("2026-08-14T08:03:00Z", "event_msg", { type: "item_completed", item: { type: "CommandExecution", id: "tool-1" } }),
+    event("2026-08-14T08:04:00Z", "event_msg", { type: "user_message", message: "again" }),
+    event("2026-08-14T08:05:00Z", "event_msg", { type: "agent_message", message: "done" }),
+  ].join("\n"));
+  const args = ["--global", "--from", "2026-08-01", "--to", "2026-08-31"];
+  const output = await runReport(home, args);
+  assert.match(output, /Messages\s+4 \(2 user, 2 assistant\)/);
+  assert.match(output, /2026-08-14\s+4 msg/);
+  assert.equal(await runReport(home, args), output);
+  assert.equal(await runReport(home, [...args, "--no-cache"]), output);
+  const precise = await runReport(home, ["--global", "--from", "2026-08-14T08:01:30Z", "--to", "2026-08-14T08:03:30Z"]);
+  assert.match(precise, /Messages\s+1 \(0 user, 1 assistant\)/);
+});
+
+test("attributes daily and monthly activity to event dates across a session", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  await fs.writeFile(path.join(sessionDir, "session.jsonl"), [
+    event("2026-08-31T08:00:00Z", "session_meta", { id: "multiple-days", cwd: REPO_ROOT }),
+    event("2026-08-31T08:01:00Z", "event_msg", { type: "user_message", message: "start" }),
+    event("2026-08-31T08:02:00Z", "event_msg", { type: "token_count", info: { total_token_usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 } } }),
+    event("2026-09-01T08:01:00Z", "event_msg", { type: "agent_message", message: "finish" }),
+    event("2026-09-01T08:02:00Z", "event_msg", { type: "token_count", info: { total_token_usage: { input_tokens: 150, output_tokens: 15, total_tokens: 165 } } }),
+  ].join("\n"));
+  const args = ["--global", "--activity", "--monthly", "--weekly", "--from", "2026-08-01", "--to", "2026-09-30"];
+  const output = await runReport(home, args);
+  assert.match(output, /2026-08-31\s+1 msg \| 110 tok/);
+  assert.match(output, /2026-09-01\s+1 msg \| 55 tok/);
+  assert.match(output, /2026-08\s+1 msg \| 110 tok/);
+  assert.match(output, /2026-09\s+1 msg \| 55 tok/);
+  assert.match(output, /Mon\s+.*1 messages \| 110 tok/);
+  assert.match(output, /Tue\s+.*1 messages \| 55 tok/);
+  assert.equal(await runReport(home, [...args, "--no-cache"]), output);
+});
+
+test("preserves the undated label in monthly activity", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  await fs.writeFile(path.join(sessionDir, "session.jsonl"), [
+    event("2026-08-14T08:00:00Z", "session_meta", { id: "undated-message", cwd: REPO_ROOT }),
+    event(undefined, "event_msg", { type: "user_message", message: "hello" }),
+  ].join("\n"));
+
+  const args = ["--global", "--monthly", "--from", "2026-08-01", "--to", "2026-08-31"];
+  const output = await runReport(home, args);
+  assert.match(output, /\(undated\)\s+1 msg/);
+  assert.equal(await runReport(home, args), output);
+  assert.equal(await runReport(home, [...args, "--no-cache"]), output);
 });

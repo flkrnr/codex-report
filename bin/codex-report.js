@@ -8,8 +8,8 @@ import { promisify } from "node:util";
 
 const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
-const SESSION_CACHE_VERSION = 7;
-const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v7.json");
+const SESSION_CACHE_VERSION = 8;
+const SESSION_CACHE_PATH = path.join(CODEX_DIR, "cache", "codex-report-sessions-v8.json");
 const INSIGHTS_CACHE_VERSION = 2;
 const execFileAsync = promisify(execFile);
 const SKILL_MD = "SKILL.md";
@@ -620,26 +620,6 @@ function recordSkillRead(evidence, skillRegistry, skillPath, count = 1) {
   evidence.scopes.set(key, info.scope);
 }
 
-function recordSkillMentions(evidence, skillRegistry, message) {
-  if (!message || !skillRegistry) {
-    return;
-  }
-
-  const mentioned = new Set();
-  for (const match of String(message).matchAll(/\$([A-Za-z0-9][A-Za-z0-9:_-]*)/g)) {
-    const name = match[1];
-    if (skillRegistry.byName.has(name)) {
-      mentioned.add(name);
-    }
-  }
-
-  for (const name of mentioned) {
-    increment(evidence.mentions, name);
-    evidence.names.set(name, name);
-    evidence.scopes.set(name, skillRegistry.byName.get(name).scope);
-  }
-}
-
 function emptyRawSkillEvidence() {
   return {
     reads: new Map(),
@@ -686,7 +666,22 @@ function dailySessionFor(days, ts) {
   return session;
 }
 
-async function parseSessionFile(filePath, turnIdsBySessionId) {
+// Both log formats represent completed user-visible messages. Response items also
+// contain context and copies of these messages, so they are not counted here.
+function completedMessage(payload) {
+  if (payload.type === "user_message") return { role: "user", text: payload.message };
+  if (payload.type === "agent_message") return { role: "assistant" };
+  if (payload.type !== "item_completed") return null;
+  const item = payload.item;
+  if (item?.type === "AgentMessage") return { role: "assistant" };
+  if (item?.type !== "UserMessage") return null;
+  return {
+    role: "user",
+    text: (item.content ?? []).map((part) => part.text ?? "").join("\n"),
+  };
+}
+
+async function parseSessionFile(filePath, turnIdsBySessionId, start = null, end = null) {
   const meta = {};
   const days = new Map();
   const turnIds = new Set();
@@ -728,7 +723,8 @@ async function parseSessionFile(filePath, turnIdsBySessionId) {
       }
     }
 
-    if (replayingForkHistory) {
+    const inRange = !ts || !((start && ts < start) || (end && ts > end));
+    if (replayingForkHistory || !inRange) {
       if (eventType === "turn_context") {
         currentReasoningEffort = payload.effort
           ?? payload.collaboration_mode?.settings?.reasoning_effort
@@ -759,11 +755,12 @@ async function parseSessionFile(filePath, turnIdsBySessionId) {
       }
     } else if (eventType === "event_msg") {
       currentServiceTier = payload.thread_settings?.service_tier ?? currentServiceTier;
-      if (payload.type === "user_message") {
-        increment(daySession.messages, "user");
-        recordRawSkillMentions(daySession.rawSkillEvidence, payload.message);
-      } else if (payload.type === "agent_message") {
-        increment(daySession.messages, "assistant");
+      const message = completedMessage(payload);
+      if (message) {
+        increment(daySession.messages, message.role);
+        if (message.role === "user") {
+          recordRawSkillMentions(daySession.rawSkillEvidence, message.text);
+        }
       } else if (payload.type === "token_count") {
         const info = payload.info;
         const totalUsage = info?.total_token_usage;
@@ -791,6 +788,9 @@ async function parseSessionFile(filePath, turnIdsBySessionId) {
       }
     }
   }
+
+  // Even an out-of-range parent supplies turn IDs needed to skip fork history.
+  if (meta.id) turnIdsBySessionId.set(meta.id, turnIds);
 
   if (![...days.values()].some((day) => day.firstTs)) {
     return null;
@@ -851,6 +851,7 @@ function materializeSession(parsed, start, end, skillRegistry) {
     reasoningEfforts: new Map(),
     skillEvidence: emptySkillEvidence(),
     tokenEvents: 0,
+    days: new Map(),
   };
 
   for (const [day, daily] of parsed.days) {
@@ -863,178 +864,11 @@ function materializeSession(parsed, start, end, skillRegistry) {
       session.firstTs = session.firstTs == null || daily.firstTs < session.firstTs ? daily.firstTs : session.firstTs;
       session.lastTs = session.lastTs == null || daily.lastTs > session.lastTs ? daily.lastTs : session.lastTs;
     }
+    session.days.set(day, daily);
     mergeDailySession(session, daily, skillRegistry);
   }
 
   return session.firstTs ? session : null;
-}
-
-async function readSession(filePath, start, end, skillRegistry, turnIdsBySessionId) {
-  const meta = {};
-  const turnIds = new Set();
-  let firstTs = null;
-  let lastTs = null;
-  const messages = new Map();
-  const tools = new Map();
-  const tokens = emptyTokens();
-  const models = new Map();
-  const modelTokens = new Map();
-  const serviceTiers = new Map();
-  const reasoningEfforts = new Map();
-  const skillEvidence = emptySkillEvidence();
-  let currentModel = null;
-  let currentServiceTier = null;
-  let currentReasoningEffort = null;
-  let previousTotalUsage = emptyTokens();
-  let inheritedTurnIds = null;
-  let replayingForkHistory = false;
-  let hasCanonicalMeta = false;
-  let tokenEvents = 0;
-
-  const stream = fs.createReadStream(filePath, { encoding: "utf8" });
-  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
-
-  for await (const line of lines) {
-    let event;
-    try {
-      event = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
-    const ts = parseTimestamp(event.timestamp);
-    const inRange = !ts || !((start && ts < start) || ts > end);
-
-    const eventType = event.type;
-    const payload = event.payload ?? {};
-
-    if (eventType === "session_meta" && !hasCanonicalMeta) {
-      Object.assign(meta, payload);
-      hasCanonicalMeta = true;
-      inheritedTurnIds = payload.forked_from_id
-        ? turnIdsBySessionId.get(payload.forked_from_id) ?? null
-        : null;
-      replayingForkHistory = Boolean(inheritedTurnIds?.size);
-    }
-
-    if (eventType === "turn_context" && payload.turn_id) {
-      turnIds.add(payload.turn_id);
-      if (replayingForkHistory && !inheritedTurnIds.has(payload.turn_id)) {
-        replayingForkHistory = false;
-      }
-    }
-
-    if (replayingForkHistory) {
-      if (eventType === "turn_context") {
-        currentReasoningEffort = payload.effort
-          ?? payload.collaboration_mode?.settings?.reasoning_effort
-          ?? currentReasoningEffort;
-        currentModel = payload.model ?? currentModel;
-      } else if (eventType === "event_msg") {
-        currentServiceTier = payload.thread_settings?.service_tier ?? currentServiceTier;
-        const totalUsage = payload.type === "token_count"
-          ? payload.info?.total_token_usage
-          : null;
-        if (totalUsage) {
-          previousTotalUsage = totalUsage;
-        }
-      }
-      continue;
-    }
-
-    if (ts && inRange) {
-      firstTs = firstTs == null || ts < firstTs ? ts : firstTs;
-      lastTs = lastTs == null || ts > lastTs ? ts : lastTs;
-    }
-
-    if (eventType === "turn_context") {
-      currentReasoningEffort = payload.effort
-        ?? payload.collaboration_mode?.settings?.reasoning_effort
-        ?? currentReasoningEffort;
-      if (inRange) {
-        if (currentServiceTier) increment(serviceTiers, currentServiceTier);
-        if (currentReasoningEffort) increment(reasoningEfforts, currentReasoningEffort);
-      }
-      if (payload.model) {
-        currentModel = payload.model;
-        if (inRange) {
-          increment(models, payload.model);
-        }
-      }
-    } else if (eventType === "event_msg") {
-      currentServiceTier = payload.thread_settings?.service_tier ?? currentServiceTier;
-      if (!inRange) {
-        const totalUsage = payload.type === "token_count"
-          ? payload.info?.total_token_usage
-          : null;
-        if (totalUsage) {
-          previousTotalUsage = totalUsage;
-        }
-        continue;
-      }
-
-      if (payload.type === "user_message") {
-        increment(messages, "user");
-        recordSkillMentions(skillEvidence, skillRegistry, payload.message);
-      } else if (payload.type === "agent_message") {
-        increment(messages, "assistant");
-      } else if (payload.type === "token_count") {
-        const info = payload.info;
-        const totalUsage = info?.total_token_usage;
-        const usage = totalUsage
-          ? (tokenDelta(totalUsage, previousTotalUsage) ?? info?.last_token_usage)
-          : info?.last_token_usage;
-        if (totalUsage) {
-          previousTotalUsage = totalUsage;
-        }
-        if (usage) {
-          addTokens(tokens, usage);
-          addModelTokens(modelTokens, currentModel, usage);
-          if (tokenVolume(usage) > 0) {
-            tokenEvents += 1;
-          }
-        }
-      }
-    } else if (inRange && eventType === "response_item") {
-      if (payload.type === "function_call" || payload.type === "custom_tool_call") {
-        increment(tools, payload.name ?? payload.type);
-        const args = parseFunctionArguments(payload.arguments);
-        for (const skillPath of skillReadPathsFromCommand(args.cmd ?? args.command ?? "")) {
-          recordSkillRead(skillEvidence, skillRegistry, skillPath);
-        }
-      }
-    }
-  }
-
-  if (meta.id) {
-    turnIdsBySessionId.set(meta.id, turnIds);
-  }
-
-  if (!firstTs) {
-    return null;
-  }
-
-  return {
-    path: filePath,
-    id: meta.id ?? path.basename(filePath, ".jsonl"),
-    forkedFromId: meta.forked_from_id ?? null,
-    turnIds,
-    firstTs,
-    lastTs,
-    cwd: label(meta.cwd),
-    repositoryUrl: typeof meta.git?.repository_url === "string" ? meta.git.repository_url : null,
-    provider: label(meta.model_provider),
-    source: label(meta.originator ?? meta.source),
-    messages,
-    tools,
-    tokens,
-    modelTokens,
-    models,
-    serviceTiers,
-    reasoningEfforts,
-    skillEvidence,
-    tokenEvents,
-  };
 }
 
 async function readSessions(files, start, end, skillRegistry, useCache, requireInsights = false) {
@@ -1043,10 +877,11 @@ async function readSessions(files, start, end, skillRegistry, useCache, requireI
     console.error(`Cache bypassed: recalculating ${fmtInt(files.length)} session ${files.length === 1 ? "file" : "files"}.`);
     const sessions = [];
     for (const file of files) {
-      const session = await readSession(file, start, end, skillRegistry, turnIdsBySessionId);
-      if (session) {
-        turnIdsBySessionId.set(session.id, session.turnIds);
-        sessions.push(session);
+      const parsed = await parseSessionFile(file, turnIdsBySessionId, start, end);
+      if (parsed) {
+        turnIdsBySessionId.set(parsed.id, parsed.turnIds);
+        const session = materializeSession(parsed, start, end, skillRegistry);
+        if (session) sessions.push(session);
       }
     }
     return sessions;
@@ -1671,7 +1506,7 @@ function plainActivitySection(title, map, limit) {
 function monthlyActivity(daySessions) {
   const months = new Map();
   for (const [day, activity] of daySessions) {
-    const month = day.slice(0, 7);
+    const month = day === "(undated)" ? day : day.slice(0, 7);
     if (!months.has(month)) {
       months.set(month, { messages: 0, tokens: 0 });
     }
@@ -1688,10 +1523,13 @@ function weekdayIndex(date) {
 function weeklyActivity(sessions) {
   const counts = new Map(WEEKDAYS.map((day) => [day, { messages: 0, tokens: 0 }]));
   for (const session of sessions) {
-    const day = WEEKDAYS[weekdayIndex(session.firstTs)];
-    const activity = counts.get(day);
-    activity.messages += sessionMessageCount(session);
-    activity.tokens += sessionTokenCount(session);
+    for (const daily of session.days.values()) {
+      if (!daily.firstTs) continue;
+      const day = WEEKDAYS[weekdayIndex(daily.firstTs)];
+      const activity = counts.get(day);
+      activity.messages += sessionMessageCount(daily);
+      activity.tokens += sessionTokenCount(daily);
+    }
   }
   return counts;
 }
@@ -1930,13 +1768,15 @@ async function main() {
   const reasoningEfforts = new Map();
 
   for (const session of sessions) {
-    const day = localDay(session.firstTs);
-    if (!daySessions.has(day)) {
-      daySessions.set(day, { messages: 0, tokens: 0 });
+    for (const [day, daily] of session.days) {
+      if (!hasActivity(daily)) continue;
+      if (!daySessions.has(day)) {
+        daySessions.set(day, { messages: 0, tokens: 0 });
+      }
+      daySessions.get(day).messages += sessionMessageCount(daily);
+      daySessions.get(day).tokens += sessionTokenCount(daily);
+      if (day !== "(undated)") activeDays.add(day);
     }
-    daySessions.get(day).messages += sessionMessageCount(session);
-    daySessions.get(day).tokens += sessionTokenCount(session);
-    activeDays.add(day);
 
     for (const key of TOKEN_KEYS) {
       tokens[key] += session.tokens[key] ?? 0;

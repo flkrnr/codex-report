@@ -197,6 +197,10 @@ $ codex-report --global
 - When the current folder has no matching Codex sessions, the CLI falls back
   to a global report.
 - Dates without times are interpreted in the local timezone.
+- Daily, monthly, and weekday activity uses each event's date, including sessions
+  that span multiple days. Messages are counted from legacy `user_message` /
+  `agent_message` events and `item_completed` user/agent messages; response-item
+  copies are not counted again.
 - Parsed daily session summaries are cached once per source file under
   `~/.codex/cache` by default. A source JSONL size or modification-time change
   invalidates its entry; date ranges and the current skill registry are applied
