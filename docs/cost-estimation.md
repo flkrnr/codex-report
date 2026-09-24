@@ -62,20 +62,25 @@ unpriced and excluded from the estimated dollar total.
 
 ## Built-In Prices
 
-The table contains standard text-token prices in USD per 1 million tokens. It
-was last checked on 2026-08-15 against the official
+The table contains standard text-token prices in USD per 1 million tokens.
+The original entries were checked on 2026-08-15 against the official
 [OpenAI API pricing documentation](https://developers.openai.com/api/docs/pricing)
 and model pages, including [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol),
 [Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra), and
 [Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
 
-GPT-6 Astra pricing was added and checked on 2026-09-07 against its official
-[model page](https://developers.openai.com/api/docs/models/gpt-6-astra).
+GPT-6 pricing and GPT-5.6 Sol pricing were checked on 2026-09-24 against the
+official model pages for [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra),
+[Sol](https://developers.openai.com/api/docs/models/gpt-6-sol),
+[Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), and
+[GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol).
 
 | Model names | Input | Cached input | Output |
 | --- | ---: | ---: | ---: |
 | `gpt-6-astra` | $10.00 | $1.00 | $50.00 |
-| `gpt-5.6`, `gpt-5.6-sol` | $5.00 | $0.50 | $30.00 |
+| `gpt-6-sol` | $2.00 | $0.20 | $10.00 |
+| `gpt-6-luna` | $0.10 | $0.01 | $0.50 |
+| `gpt-5.6`, `gpt-5.6-sol` | $4.00 | $0.40 | $20.00 |
 | `gpt-5.6-terra` | $2.00 | $0.20 | $12.00 |
 | `gpt-5.6-luna` | $0.20 | $0.02 | $1.20 |
 | `gpt-5.5` | $5.00 | $0.50 | $30.00 |
@@ -88,6 +93,9 @@ GPT-6 Astra pricing was added and checked on 2026-09-07 against its official
 | `codex-mini-latest` | $1.50 | $0.375 | $6.00 |
 
 The unsuffixed `gpt-5.6` alias uses GPT-5.6 Sol pricing.
+OpenAI lists GPT-5.6 Sol's promotional pricing as available at least through
+2026-11-21. The report applies this built-in table to all selected usage,
+including older sessions; it does not reconstruct historical prices.
 
 ## Pricing Formula
 
@@ -131,7 +139,7 @@ Subscription quota, usage dashboard charts, included usage, credits, discounts,
 batch pricing, regional processing differences, and non-token tool charges are
 not included.
 
-GPT-6 Astra and GPT-5.6 estimates use standard processing prices. The report can identify many
+GPT-6 and GPT-5.6 estimates use standard processing prices. The report can identify many
 Fast-mode turns from local `service_tier` settings, but the cost estimate does
 not apply Fast-mode pricing. Cache writes and individual requests over the
 272K-input-token long-context threshold are also not identified reliably.
