@@ -529,12 +529,12 @@ test("attributes daily and monthly activity to event dates across a session", as
   ].join("\n"));
   const args = ["--global", "--activity", "--monthly", "--weekly", "--from", "2026-08-01", "--to", "2026-09-30"];
   const output = await runReport(home, args);
-  assert.match(output, /2026-08-31\s+1 msg \| 110 tok/);
-  assert.match(output, /2026-09-01\s+1 msg \| 55 tok/);
-  assert.match(output, /2026-08\s+1 msg \| 110 tok/);
-  assert.match(output, /2026-09\s+1 msg \| 55 tok/);
-  assert.match(output, /Mon\s+.*1 messages \| 110 tok/);
-  assert.match(output, /Tue\s+.*1 messages \| 55 tok/);
+  assert.match(output, /2026-08-31\s+1 msg \|\s+110 tok/);
+  assert.match(output, /2026-09-01\s+1 msg \|\s+55 tok/);
+  assert.match(output, /2026-08\s+1 msg \|\s+110 tok/);
+  assert.match(output, /2026-09\s+1 msg \|\s+55 tok/);
+  assert.match(output, /Mon\s+.*1 messages \|\s+110 tok/);
+  assert.match(output, /Tue\s+.*1 messages \|\s+55 tok/);
   assert.equal(await runReport(home, [...args, "--no-cache"]), output);
 });
 
