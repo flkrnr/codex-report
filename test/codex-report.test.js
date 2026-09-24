@@ -385,6 +385,11 @@ test("reports fast mode and every reasoning effort once per turn", async (t) => 
   assert.match(cached, /medium\s+2 turns.*50%/);
   assert.match(cached, /high\s+1 turns.*25%/);
   assert.match(cached, /low\s+1 turns.*25%/);
+  const json = JSON.parse(await runReport(home, [...args, "--json"]));
+  assert.equal(json.insights.fastModePercent, 75);
+  assert.deepEqual(json.reasoningEfforts, [
+    { name: "medium", turns: 2 }, { name: "high", turns: 1 }, { name: "low", turns: 1 },
+  ]);
 
   const full = await runReport(home, ["--global", "--from", "2026-08-14", "--to", "2026-08-14"]);
   assert.match(full, /Activity insights/);
@@ -467,6 +472,14 @@ test("groups remote worktrees, local repositories, and non-Git directories", asy
   assert.match(output, /github\.com\/acme\/example\s+2 sessions/);
   assert.ok(output.split("\n").some((line) => line.includes("local-repo") && line.includes("2 sessions")));
   assert.ok(output.split("\n").some((line) => line.includes("plain-directory") && line.includes("1 sessions")));
+  const report = JSON.parse(await runReport(home, ["--global", "--json", "--from", "2026-08-14", "--to", "2026-08-14"]));
+  assert.equal(report.projects.length, 5);
+  assert.equal(report.repositories.length, 3);
+  assert.deepEqual(report.repositories.find((repo) => repo.name === "github.com/acme/example"), {
+    name: "github.com/acme/example", sessions: 2,
+  });
+  assert.equal(report.repositories.find((repo) => repo.name.endsWith("local-repo")).sessions, 2);
+  assert.equal(report.repositories.reduce((total, repo) => total + repo.sessions, 0), 5);
 });
 
 test("aggregates activity by month", async (t) => {
@@ -587,4 +600,31 @@ test("includes Reserve at Luna rates and labels the estimate in both report form
   assert.match(boxed, /API cost\s+\$2\.84/);
   const limited = await runReport(home, [...args, "--costs", "--top", "1"]);
   assert.match(limited, /estimated: gpt-reserve ≈ gpt-5\.6-luna/);
+});
+
+test("JSON report exposes daily activity and totals without terminal formatting", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-json-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  await fs.writeFile(path.join(sessionDir, "session.jsonl"), [
+    event("2026-08-14T08:00:00Z", "session_meta", { id: "json-report", cwd: REPO_ROOT }),
+    event("2026-08-14T08:01:00Z", "event_msg", { type: "user_message", message: "hello" }),
+  ].join("\n"));
+  const args = ["--global", "--json", "--from", "2026-08-14", "--to", "2026-08-14"];
+  for (const expectedCache of [/Cache miss/, /Cache hit/]) {
+    const { stdout, stderr } = await runReportResult(home, args);
+    const report = JSON.parse(stdout);
+    assert.equal(report.schemaVersion, 1);
+    assert.equal(report.sessions, 1);
+    assert.equal(report.messages, 1);
+    assert.deepEqual(report.days, [{ date: "2026-08-14", messages: 1, tokens: 0 }]);
+    assert.equal(report.costEstimate.totalCost, 0);
+    assert.match(stderr, expectedCache);
+  }
+  const { stdout } = await runReportResult(home, ["--global", "--json", "--from", "2026-08-15", "--to", "2026-08-15"]);
+  const empty = JSON.parse(stdout);
+  assert.equal(empty.sessions, 0);
+  assert.equal(empty.messages, 0);
+  assert.deepEqual(empty.days, []);
 });
