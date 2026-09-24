@@ -71,7 +71,7 @@ const SECTION_FLAGS = new Map([
 ]);
 
 function usage() {
-  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--no-cache] [--clear-cache] [--weekly] [--monthly] [--projects] [--repositories] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--insights] [--skills]");
+  console.error("Usage: codex-report [--json] [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--no-cache] [--clear-cache] [--weekly] [--monthly] [--projects] [--repositories] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--insights] [--skills]");
 }
 
 function parseArgs(argv) {
@@ -89,6 +89,8 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === "--global") {
       args.global = true;
+    } else if (arg === "--json") {
+      args.json = true;
     } else if (arg === "--top") {
       args.top = Number.parseInt(next, 10);
       index += 1;
@@ -1453,14 +1455,13 @@ function plainTopSection(title, map, limit, unit, { emptyText = "none" } = {}) {
   return lines;
 }
 
-function activityLine(name, activity, totalMessages, innerWidth) {
+function activityLine(name, activity, totalMessages, innerWidth, detail) {
   const barWidth = 16;
   const percentWidth = 4;
-  const detailWidth = 20;
+  const detailWidth = Math.max(20, detail.length);
   const availableNameWidth = innerWidth - 2 - 1 - detailWidth - 2 - barWidth - 1 - percentWidth;
   const nameWidth = Math.max(12, availableNameWidth);
   const percent = totalMessages > 0 ? Math.round((activity.messages / totalMessages) * 100) : 0;
-  const detail = `${fmtCompact(activity.messages)} msg | ${fmtCompact(activity.tokens)} tok`;
   const displayName = name.includes("/") ? truncatePath(name, nameWidth) : truncateMiddle(name, nameWidth);
   const left = `  ${displayName.padEnd(nameWidth)}`;
   const middle = truncate(detail, detailWidth).padStart(detailWidth);
@@ -1477,17 +1478,17 @@ function activitySection(lines, title, map, limit, innerWidth) {
   }
 
   const totalMessages = entries.reduce((sum, [, activity]) => sum + activity.messages, 0);
+  const details = activityDetails(new Map(entries.slice(0, limit)));
   for (const [name, activity] of entries.slice(0, limit)) {
-    lines.push(activityLine(name, activity, totalMessages, innerWidth));
+    lines.push(activityLine(name, activity, totalMessages, innerWidth, details.get(name)));
   }
 }
 
-function plainActivityLine(name, activity, totalMessages, nameWidth) {
+function plainActivityLine(name, activity, totalMessages, nameWidth, detail) {
   const barWidth = 16;
   const percentWidth = 4;
-  const detailWidth = 20;
+  const detailWidth = Math.max(20, detail.length);
   const percent = totalMessages > 0 ? Math.round((activity.messages / totalMessages) * 100) : 0;
-  const detail = `${fmtCompact(activity.messages)} msg | ${fmtCompact(activity.tokens)} tok`;
   const displayName = name.includes("/") ? truncatePath(name, nameWidth) : truncateMiddle(name, nameWidth);
   return `${displayName.padEnd(nameWidth)} ${detail.padStart(detailWidth)}  ${bar(activity.messages, totalMessages, barWidth)} ${`${percent}%`.padStart(percentWidth)}`;
 }
@@ -1501,10 +1502,11 @@ function plainActivitySection(title, map, limit) {
   }
 
   const totalMessages = entries.reduce((sum, [, activity]) => sum + activity.messages, 0);
+  const details = activityDetails(new Map(entries.slice(0, limit)));
   const maxNameWidth = Math.max(12, terminalWidth() - 43);
   const nameWidth = Math.min(maxNameWidth, Math.max(12, ...entries.slice(0, limit).map(([name]) => name.length)));
   for (const [name, activity] of entries.slice(0, limit)) {
-    lines.push(plainActivityLine(name, activity, totalMessages, nameWidth));
+    lines.push(plainActivityLine(name, activity, totalMessages, nameWidth, details.get(name)));
   }
   return lines;
 }
@@ -1540,11 +1542,21 @@ function weeklyActivity(sessions) {
   return counts;
 }
 
+function activityDetails(counts, formatMessages = fmtCompact, messageUnit = "msg") {
+  const messageWidth = Math.max(4, ...[...counts.values()].map((activity) => formatMessages(activity.messages).length));
+  const tokenWidth = Math.max(4, ...[...counts.values()].map((activity) => fmtCompact(activity.tokens).length));
+  return new Map([...counts].map(([day, activity]) => [
+    day,
+    `${formatMessages(activity.messages).padStart(messageWidth)} ${messageUnit} | ${fmtCompact(activity.tokens).padStart(tokenWidth)} tok`,
+  ]));
+}
+
 function weeklyActivitySection(lines, sessions, innerWidth) {
   const counts = weeklyActivity(sessions);
+  const details = activityDetails(counts, fmtInt, "messages");
   const maxMessages = Math.max(...[...counts.values()].map((activity) => activity.messages), 0);
   const labelWidth = 5;
-  const detailWidth = 28;
+  const detailWidth = Math.max(28, ...[...details.values()].map((detail) => detail.length));
   const barWidth = Math.max(12, Math.min(28, innerWidth - 2 - labelWidth - 1 - detailWidth));
 
   lines.push(boxedLine("Weekly activity", innerWidth));
@@ -1554,14 +1566,14 @@ function weeklyActivitySection(lines, sessions, innerWidth) {
   }
 
   for (const [day, activity] of counts) {
-    const detail = `${fmtInt(activity.messages)} messages | ${fmtCompact(activity.tokens)} tok`;
-    const line = `  ${day.padEnd(labelWidth)}${bar(activity.messages, maxMessages, barWidth)} ${truncate(detail, detailWidth).padStart(detailWidth)}`;
+    const line = `  ${day.padEnd(labelWidth)}${bar(activity.messages, maxMessages, barWidth)} ${details.get(day).padStart(detailWidth)}`;
     lines.push(boxedLine(line, innerWidth));
   }
 }
 
 function plainWeeklyActivitySection(sessions) {
   const counts = weeklyActivity(sessions);
+  const details = activityDetails(counts, fmtInt, "messages");
   const maxMessages = Math.max(...[...counts.values()].map((activity) => activity.messages), 0);
   const lines = ["Weekly activity", ""];
 
@@ -1571,8 +1583,7 @@ function plainWeeklyActivitySection(sessions) {
   }
 
   for (const [day, activity] of counts) {
-    const detail = `${fmtInt(activity.messages)} messages | ${fmtCompact(activity.tokens)} tok`;
-    lines.push(`${day.padEnd(3)}  ${bar(activity.messages, maxMessages, 28)}  ${detail}`);
+    lines.push(`${day.padEnd(3)}  ${bar(activity.messages, maxMessages, 28)}  ${details.get(day)}`);
   }
   return lines;
 }
@@ -1724,7 +1735,7 @@ async function main() {
   const start = parseDate(args.from);
   const end = parseDate(args.to ?? localDay(new Date()), { endOfDay: !args.to?.includes("T") });
   const wantsSkills = args.sections.includes("skills");
-  const wantsInsights = args.sections.length === 0 || args.sections.includes("insights");
+  const wantsInsights = args.json || args.sections.length === 0 || args.sections.includes("insights");
   const skillRegistry = wantsSkills ? await discoverSkills(scope) : null;
   const files = await sessionFiles(SESSIONS_DIR);
   const cacheSupportsRange = !args.from?.includes("T") && !args.to?.includes("T");
@@ -1826,6 +1837,28 @@ async function main() {
     skillAnalysis,
   };
 
+  if (args.json) {
+    console.log(JSON.stringify({
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      period: { from: start ? localDay(start) : null, to: localDay(end) },
+      scope,
+      sessions: sessions.length,
+      messages: (messages.get("user") ?? 0) + (messages.get("assistant") ?? 0),
+      tokens,
+      days: [...daySessions].map(([date, activity]) => ({ date, ...activity })),
+      models: [...modelTokens].map(([name, usage]) => ({ name, tokens: tokenVolume(usage), turns: models.get(name) ?? 0 }))
+        .sort((a, b) => b.tokens - a.tokens),
+      reasoningEfforts: sortedEntries(reasoningEfforts).map(([name, turns]) => ({ name, turns })),
+      serviceTiers: sortedEntries(serviceTiers).map(([name, turns]) => ({ name, turns })),
+      insights: activityInsights(serviceTiers),
+      projects: sortedEntries(projects).map(([name, count]) => ({ name, sessions: count })),
+      repositories: sortedEntries(repositories).map(([name, count]) => ({ name, sessions: count })),
+      tools: sortedEntries(tools).map(([name, count]) => ({ name, count })),
+      costEstimate,
+    }));
+    return;
+  }
   console.log(args.sections.length > 0 ? renderPlainSections(report) : renderReport(report));
 }
 
