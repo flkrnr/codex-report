@@ -97,6 +97,19 @@ OpenAI lists GPT-5.6 Sol's promotional pricing as available at least through
 2026-11-21. The report applies this built-in table to all selected usage,
 including older sessions; it does not reconstruct historical prices.
 
+### Estimated aliases
+
+`gpt-reserve` is estimated using the `gpt-5.6-luna` rates above and included in
+the total. Both report formats label this assumption as
+`estimated: gpt-reserve ≈ gpt-5.6-luna`, even when the row is outside `--top`.
+This is an API-equivalent estimate, not an additional subscription charge or
+a separately published Reserve API price. OpenAI describes
+[Luna Reserve](https://help.openai.com/en/articles/20001499-luna-reserve-in-codex-and-chatgpt-work)
+as additional GPT-5.6 Luna usage; the `gpt-reserve` mapping is also visible in
+[reported Codex protocol data](https://github.com/openai/codex/issues/45132).
+The alias may need updating if OpenAI changes its underlying model.
+`codex-auto-review` remains unpriced.
+
 ## Pricing Formula
 
 Prices are stored as USD per 1 million tokens for each known model:

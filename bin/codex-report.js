@@ -51,6 +51,8 @@ const MODEL_PRICES_USD_PER_1M = new Map([
   ["codex-mini-latest", { input: 1.5, cachedInput: 0.375, output: 6 }],
 ]);
 const BOX_MIN_WIDTH = 76;
+// Reserve is a fallback mode; estimate its API-equivalent cost using Luna.
+const ESTIMATED_MODEL_ALIASES = new Map([["gpt-reserve", "gpt-5.6-luna"]]);
 const BOX_MAX_WIDTH = 110;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SECTION_FLAGS = new Map([
@@ -998,19 +1000,10 @@ function fmtCompact(value) {
 
 function fmtUSD(value) {
   const number = Number(value) || 0;
-  if (number === 0) {
-    return "$0";
-  }
-  if (number >= 100) {
-    return `$${number.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-  }
-  if (number >= 10) {
-    return `$${number.toFixed(2)}`;
-  }
-  if (number >= 1) {
-    return `$${number.toFixed(3)}`;
-  }
-  return `$${number.toFixed(4)}`;
+  return `$${number.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function shortPath(value) {
@@ -1233,7 +1226,8 @@ function normalizeModelName(model) {
 }
 
 function modelPrice(model) {
-  return MODEL_PRICES_USD_PER_1M.get(normalizeModelName(model));
+  const normalized = normalizeModelName(model);
+  return MODEL_PRICES_USD_PER_1M.get(ESTIMATED_MODEL_ALIASES.get(normalized) ?? normalized);
 }
 
 function estimateCostForTokens(tokens, price) {
@@ -1305,6 +1299,12 @@ function costLine(entry, totalCost, innerWidth) {
   return boxedLine(`${left} ${middle}  ${right}`, innerWidth);
 }
 
+function costEstimateNotes(estimate) {
+  return estimate.modelCosts
+    .filter((entry) => ESTIMATED_MODEL_ALIASES.has(entry.canonicalModel))
+    .map((entry) => `estimated: ${entry.model} ≈ ${ESTIMATED_MODEL_ALIASES.get(entry.canonicalModel)}`);
+}
+
 function costSection(lines, title, estimate, limit, innerWidth) {
   lines.push(boxedLine(title, innerWidth));
   if (estimate.modelCosts.length === 0) {
@@ -1314,6 +1314,9 @@ function costSection(lines, title, estimate, limit, innerWidth) {
 
   for (const entry of estimate.modelCosts.slice(0, limit)) {
     lines.push(costLine(entry, estimate.totalCost, innerWidth));
+  }
+  for (const note of costEstimateNotes(estimate)) {
+    lines.push(boxedLine(`  ${note}`, innerWidth));
   }
 
   if (estimate.unpricedModels.length > 0) {
@@ -1339,6 +1342,7 @@ function plainCostSection(estimate, limit) {
   }
   lines.push("");
   lines.push(`Total estimated API cost: ${fmtUSD(estimate.totalCost)}`);
+  lines.push(...costEstimateNotes(estimate));
   if (estimate.unpricedModels.length > 0) {
     lines.push(`Unpriced models: ${estimate.unpricedModels.map((entry) => entry.model).join(", ")}`);
   }

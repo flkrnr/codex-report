@@ -421,12 +421,12 @@ test("applies current standard prices for GPT-6 and GPT-5.6 models to selected u
   const output = await runReport(home, ["--global", "--costs", "--from", "2026-08-14", "--to", "2026-08-14"]);
   assert.match(output, /gpt-6-astra\s+\$61\.00/);
   assert.match(output, /gpt-6-sol\s+\$12\.20/);
-  assert.match(output, /gpt-6-luna\s+\$0\.610/);
+  assert.match(output, /gpt-6-luna\s+\$0\.61\s/);
   assert.match(output, /gpt-5\.6\s+\$24\.40/);
   assert.match(output, /gpt-5\.6-sol\s+\$24\.40/);
   assert.match(output, /gpt-5\.6-terra\s+\$14\.20/);
-  assert.match(output, /gpt-5\.6-luna\s+\$1\.420/);
-  assert.match(output, /Total estimated API cost: \$138\n/);
+  assert.match(output, /gpt-5\.6-luna\s+\$1\.42\s/);
+  assert.match(output, /Total estimated API cost: \$138\.23\n/);
   assert.doesNotMatch(output, /Unpriced models:/);
 });
 
@@ -553,4 +553,38 @@ test("preserves the undated label in monthly activity", async (t) => {
   assert.match(output, /\(undated\)\s+1 msg/);
   assert.equal(await runReport(home, args), output);
   assert.equal(await runReport(home, [...args, "--no-cache"]), output);
+});
+
+test("includes Reserve at Luna rates and labels the estimate in both report formats", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  for (const model of ["gpt-reserve", "gpt-5.6-luna", "codex-auto-review"]) {
+    await fs.writeFile(path.join(sessionDir, `${model}.jsonl`), [
+      event("2026-09-24T08:00:00Z", "session_meta", { id: model, cwd: REPO_ROOT }),
+      event("2026-09-24T08:01:00Z", "turn_context", { model }),
+      event("2026-09-24T08:02:00Z", "event_msg", {
+        type: "token_count",
+        info: { total_token_usage: {
+          input_tokens: 2_000_000, cached_input_tokens: 1_000_000,
+          output_tokens: 1_000_000, total_tokens: 3_000_000,
+        } },
+      }),
+    ].join("\n"));
+  }
+  const args = ["--global", "--from", "2026-09-24", "--to", "2026-09-24"];
+  const plain = await runReport(home, [...args, "--costs"]);
+  const boxed = await runReport(home, args);
+  for (const output of [plain, boxed]) {
+    assert.match(output, /gpt-reserve\s+\$1\.42\s/);
+    assert.match(output, /gpt-5\.6-luna\s+\$1\.42\s/);
+    assert.match(output, /estimated: gpt-reserve ≈ gpt-5\.6-luna/);
+    assert.match(output, /[Uu]npriced(?: models)?: codex-auto-review/);
+    assert.doesNotMatch(output, /[Uu]npriced[^\n]*gpt-reserve/);
+  }
+  assert.match(plain, /Total estimated API cost: \$2\.84/);
+  assert.match(boxed, /API cost\s+\$2\.84/);
+  const limited = await runReport(home, [...args, "--costs", "--top", "1"]);
+  assert.match(limited, /estimated: gpt-reserve ≈ gpt-5\.6-luna/);
 });
