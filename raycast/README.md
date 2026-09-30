@@ -19,9 +19,13 @@ publication is required.
 - ⌘1: Today
 - ⌘2: This Week, starting on Monday
 - ⌘3: This Month
+- ⌘← / ⌘→: Previous / next day, week, or month
 - ⌘R: Refresh
 - ⌘K: Open Actions, including switching between messages, tokens, and estimated costs or copying JSON
 - ⌘⇧C: Copy a readable summary
+
+⌘1/2/3 return to the current period. Past weeks and months include the full
+period; the current period ends today.
 
 All periods use the local time zone. The default is the current week. Activity
 charts show aligned weekday and date columns, with weekly groups in the monthly
