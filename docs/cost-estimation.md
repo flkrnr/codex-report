@@ -78,6 +78,7 @@ official model pages for [Astra](https://developers.openai.com/api/docs/models/g
 | Model names | Input | Cached input | Output |
 | --- | ---: | ---: | ---: |
 | `gpt-6-astra` | $10.00 | $1.00 | $50.00 |
+| `gpt-6.1-sol` | $2.00 | $0.10 | $10.00 |
 | `gpt-6-sol` | $2.00 | $0.20 | $10.00 |
 | `gpt-6-luna` | $0.10 | $0.01 | $0.50 |
 | `gpt-5.6`, `gpt-5.6-sol` | $4.00 | $0.40 | $20.00 |
@@ -91,6 +92,9 @@ official model pages for [Astra](https://developers.openai.com/api/docs/models/g
 | `gpt-5.1-codex-max`, `gpt-5.1-codex`, `gpt-5.1`, `gpt-5-codex`, `gpt-5` | $1.25 | $0.125 | $10.00 |
 | `gpt-5.1-codex-mini`, `gpt-5-mini` | $0.25 | $0.025 | $2.00 |
 | `codex-mini-latest` | $1.50 | $0.375 | $6.00 |
+
+GPT-6.1 Sol pricing was checked on 2026-09-30 against its
+[official model page](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
 The unsuffixed `gpt-5.6` alias uses GPT-5.6 Sol pricing.
 OpenAI lists GPT-5.6 Sol's promotional pricing as available at least through
