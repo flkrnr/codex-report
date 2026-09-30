@@ -20,7 +20,7 @@ publication is required.
 - ⌘2: This Week, starting on Monday
 - ⌘3: This Month
 - ⌘R: Refresh
-- ⌘K: Open Actions, including switching between messages and tokens or copying JSON
+- ⌘K: Open Actions, including switching between messages, tokens, and estimated costs or copying JSON
 - ⌘⇧C: Copy a readable summary
 
 All periods use the local time zone. The default is the current week. Activity
@@ -33,11 +33,12 @@ without hover interaction.
 The dashboard is the entry point. Native searchable lists show details without
 re-reading session logs:
 
-- ⌘M: Models, sortable by tokens or recorded turns
+- ⌘M: Models, with estimated costs and sorting by tokens, recorded turns, or cost
 - ⌘E: Estimated API Costs, including explicitly unpriced models
 - ⌘I: Reasoning Efforts and Fast Mode share of known service tiers
 - Actions → Show Projects: session counts grouped by repository, including worktrees,
-  using the same grouping as the CLI; details show the repository or directory
+  using the same grouping as the CLI; details show the repository or directory and
+  estimated costs, with sorting by sessions or cost
 - Escape: Return to the dashboard
 
 Each detail list offers Copy Summary, Copy Name, and Copy Value. Projects are
@@ -63,3 +64,8 @@ Validate the extension with:
 npm run build
 npm run typecheck
 ```
+
+Category costs reuse cached model-token totals without changing the cache format.
+Unknown prices are shown as **Unpriced**; mixed priced/unpriced usage is marked
+**partial**. Cost sorting places entirely unpriced entries last. Activity cost bars
+and PNG exports use the same estimates.

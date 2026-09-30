@@ -6,7 +6,11 @@ import { Bar, barChart, barChartImage, compact } from "./charts";
 import { ExportPngAction } from "./export-png";
 import local from "./local.json";
 import { Breakdown } from "./breakdown";
-import { Report, money } from "./report-data";
+import { Report, money, costLabel } from "./report-data";
+
+type Metric = "tokens" | "messages" | "costs";
+const metrics: Record<Metric, string> = { tokens: "Tokens", messages: "Messages", costs: "Costs" };
+
 
 type Period = "today" | "week" | "month";
 const periods: Record<Period, string> = { today: "Today", week: "This Week", month: "This Month" };
@@ -28,7 +32,7 @@ function range(period: Period): { from: string; to: string; dates: string[] } {
   return { from, to, dates };
 }
 
-function activityBars(dates: string[], report: Report, metric: "tokens" | "messages", groupWeeks: boolean): Bar[] {
+function activityBars(dates: string[], report: Report, metric: Metric, groupWeeks: boolean): Bar[] {
   return dates.map((date, index) => {
     // Parse at local noon to keep weekday labels independent of UTC offsets.
     const localDate = new Date(`${date}T12:00:00`);
@@ -39,10 +43,12 @@ function activityBars(dates: string[], report: Report, metric: "tokens" | "messa
       monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7);
       group = `Week of ${monday.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
     }
+    const activity = report.days.find((entry) => entry.date === date);
     return {
       label: `${date.slice(5, 7)}/${date.slice(8)}`,
       weekday,
-      value: report.days.find((entry) => entry.date === date)?.[metric] ?? 0,
+      value: metric === "costs" ? activity?.cost.totalCost ?? 0 : activity?.[metric] ?? 0,
+      displayValue: metric === "costs" ? activity ? costLabel(activity.cost) : money(0) : undefined,
       group,
     };
   });
@@ -51,7 +57,7 @@ function activityBars(dates: string[], report: Report, metric: "tokens" | "messa
 export default function Command() {
   const [period, setPeriod] = useState<Period>("week");
   const [refresh, setRefresh] = useState(0);
-  const [metric, setMetric] = useState<"tokens" | "messages">("tokens");
+  const [metric, setMetric] = useState<Metric>("tokens");
   const [report, setReport] = useState<Report>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -85,11 +91,12 @@ export default function Command() {
     setReport(undefined);
     setPeriod(next);
   };
-  const unit = metric === "tokens" ? "Tokens" : "Messages";
+  const unit = metrics[metric];
   const dates = range(period).dates;
   const markdown = report ? [
     `## ${periods[period]}\n${compact(report.messages)} Messages · ${compact(report.tokens.total_tokens)} Tokens · ${report.sessions} Sessions`,
     report.sessions === 0 ? "No activity in this period yet." : barChart(`Activity · ${unit}`, activityBars(dates, report, metric, period === "month")),
+    metric === "costs" ? "Estimated API costs · unpriced usage excluded; partial totals are marked." : "",
     error ? "Refresh failed. Showing the last successful report." : "",
   ].join("\n\n") : error ? `## Report Unavailable\n\nPress ⌘R to try again.` : "## Codex Report\n\nReading local sessions…";
 
@@ -114,7 +121,9 @@ export default function Command() {
       <ActionPanel.Section title="Period">
         {(Object.keys(periods) as Period[]).map((value, index) => <Action key={value} title={periods[value]} icon={value === period ? Icon.CheckCircle : Icon.Calendar} shortcut={{ modifiers: ["cmd"], key: String(index + 1) as "1" | "2" | "3" }} onAction={() => changePeriod(value)} />)}
       </ActionPanel.Section>
-      <Action title={metric === "tokens" ? "Show Messages" : "Show Tokens"} icon={Icon.BarChart} onAction={() => setMetric(metric === "tokens" ? "messages" : "tokens")} />
+      <ActionPanel.Section title="Activity Metric">
+        {(Object.keys(metrics) as Metric[]).map((value) => <Action key={value} title={`Show ${metrics[value]}`} icon={metric === value ? Icon.CheckCircle : Icon.BarChart} onAction={() => setMetric(value)} />)}
+      </ActionPanel.Section>
       {report && <ExportPngAction card={{
         title: periods[period],
         subtitle: `${report.period.from ?? "All time"} — ${report.period.to} · Activity by ${metric}`,

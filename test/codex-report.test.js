@@ -477,7 +477,7 @@ test("groups remote worktrees, local repositories, and non-Git directories", asy
   assert.equal(report.projects.length, 5);
   assert.equal(report.repositories.length, 3);
   assert.deepEqual(report.repositories.find((repo) => repo.name === "github.com/acme/example"), {
-    name: "github.com/acme/example", sessions: 2,
+    name: "github.com/acme/example", sessions: 2, cost: { totalCost: 0, pricedTokens: 0, unpricedTokens: 0 },
   });
   assert.equal(report.repositories.find((repo) => repo.name.endsWith("local-repo")).sessions, 2);
   assert.equal(report.repositories.reduce((total, repo) => total + repo.sessions, 0), 5);
@@ -619,7 +619,7 @@ test("JSON report exposes daily activity and totals without terminal formatting"
     assert.equal(report.schemaVersion, 1);
     assert.equal(report.sessions, 1);
     assert.equal(report.messages, 1);
-    assert.deepEqual(report.days, [{ date: "2026-08-14", messages: 1, tokens: 0 }]);
+    assert.deepEqual(report.days, [{ date: "2026-08-14", messages: 1, tokens: 0, cost: { totalCost: 0, pricedTokens: 0, unpricedTokens: 0 } }]);
     assert.equal(report.costEstimate.totalCost, 0);
     assert.match(stderr, expectedCache);
   }
@@ -628,4 +628,47 @@ test("JSON report exposes daily activity and totals without terminal formatting"
   assert.equal(empty.sessions, 0);
   assert.equal(empty.messages, 0);
   assert.deepEqual(empty.days, []);
+});
+
+test("category costs reuse cached tokens and preserve unpriced usage and date ranges", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-category-costs-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  const fixtures = [
+    { day: "2026-09-21", model: "gpt-6.1-sol", repository: "git@github.com:acme/app.git" },
+    { day: "2026-09-22", model: "unpriced-model", repository: "https://github.com/acme/app.git" },
+    { day: "2026-09-22", model: "gpt-6.1-sol", repository: "https://github.com/acme/other.git" },
+  ];
+  for (const [index, fixture] of fixtures.entries()) {
+    await fs.writeFile(path.join(sessionDir, `${index}.jsonl`), [
+      event(`${fixture.day}T12:00:00Z`, "session_meta", { id: `cost-${index}`, cwd: `/deleted/worktree-${index}`, git: { repository_url: fixture.repository } }),
+      event(`${fixture.day}T12:01:00Z`, "turn_context", { model: fixture.model }),
+      event(`${fixture.day}T12:02:00Z`, "event_msg", { type: "token_count", info: { total_token_usage: {
+        input_tokens: 2_000_000, cached_input_tokens: 1_000_000, output_tokens: 1_000_000, total_tokens: 3_000_000,
+      } } }),
+    ].join("\n"));
+  }
+  // Populate the existing cache using the terminal report, before requesting costs as JSON.
+  const range = ["--global", "--from", "2026-09-21", "--to", "2026-09-22"];
+  await runReport(home, range);
+  const { stdout, stderr } = await runReportResult(home, [...range, "--json"]);
+  assert.match(stderr, /Cache hit/);
+  const report = JSON.parse(stdout);
+  assert.equal(report.costEstimate.totalCost, 24.2);
+  assert.deepEqual(report.repositories.find((repo) => repo.name === "github.com/acme/app").cost,
+    { totalCost: 12.1, pricedTokens: 3_000_000, unpricedTokens: 3_000_000 });
+  assert.deepEqual(report.models.find((model) => model.name === "unpriced-model").cost,
+    { totalCost: 0, pricedTokens: 0, unpricedTokens: 3_000_000 });
+  for (const category of [report.days, report.repositories, report.models]) {
+    assert.equal(category.reduce((sum, row) => sum + row.cost.totalCost, 0), report.costEstimate.totalCost);
+    assert.equal(category.reduce((sum, row) => sum + row.cost.unpricedTokens, 0), 3_000_000);
+  }
+  const selected = JSON.parse(await runReport(home, ["--global", "--json", "--from", "2026-09-21", "--to", "2026-09-21"]));
+  assert.equal(selected.costEstimate.totalCost, 12.1);
+  assert.equal(selected.repositories.length, 1);
+  assert.equal(selected.repositories[0].cost.unpricedTokens, 0);
+  const uncached = JSON.parse(await runReport(home, [...range, "--json", "--no-cache"]));
+  assert.deepEqual(uncached.days, report.days);
+  assert.deepEqual(uncached.repositories, report.repositories);
 });
