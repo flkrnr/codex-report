@@ -7,6 +7,7 @@ export type TokenUsage = {
 export type Report = {
   schemaVersion: number;
   generatedAt: string;
+  period: { from: string | null; to: string };
   sessions: number;
   messages: number;
   tokens: TokenUsage;

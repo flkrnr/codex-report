@@ -1,6 +1,7 @@
 import { Action, ActionPanel, Icon, List } from "@raycast/api";
 import { basename } from "node:path";
 import { useState } from "react";
+import { ExportPngAction } from "./export-png";
 import { compact } from "./charts";
 import { count, money, Report, share } from "./report-data";
 
@@ -48,9 +49,11 @@ function rowsFor(kind: Kind, report: Report, byTurns: boolean): Row[] {
 
 export function Breakdown({ kind, report, period }: { kind: Kind; report: Report; period: string }) {
   const [byTurns, setByTurns] = useState(false);
-  const rows = rowsFor(kind, report, byTurns);
+  const [search, setSearch] = useState("");
+  const terms = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const rows = rowsFor(kind, report, byTurns).filter((row) => terms.every((term) => `${row.name} ${row.detail}`.toLowerCase().includes(term)));
   const note = kind === "costs" ? "API estimate, not subscription charges. Unpriced models are excluded." : kind === "efforts" ? "Distribution of recorded reasoning settings. Missing settings are excluded." : "Usage recorded in local Codex sessions.";
-  return <List isShowingDetail navigationTitle={`${titles[kind]} · ${period}`} searchBarPlaceholder={`Filter ${kind === "efforts" ? "reasoning efforts" : kind === "projects" ? "projects" : "models"}…`}
+  return <List isShowingDetail filtering={false} onSearchTextChange={setSearch} navigationTitle={`${titles[kind]} · ${period}`} searchBarPlaceholder={`Filter ${kind === "efforts" ? "reasoning efforts" : kind === "projects" ? "projects" : "models"}…`}
     searchBarAccessory={kind === "models" ? <List.Dropdown tooltip="Sort Models" value={byTurns ? "turns" : "tokens"} onChange={(value) => setByTurns(value === "turns")}><List.Dropdown.Item title="By Tokens" value="tokens" /><List.Dropdown.Item title="By Turns" value="turns" /></List.Dropdown> : undefined}>
     <List.EmptyView title="No Data for This Period" description="Go back and choose another period." icon={Icon.BarChart} />
     <List.Section title={period} subtitle={kind === "costs" ? `${money(report.costEstimate.totalCost)}${report.costEstimate.unpricedModels.length ? " · partial estimate" : " estimated"}` : `${rows.length} ${kind}`}>
@@ -59,6 +62,14 @@ export function Breakdown({ kind, report, period }: { kind: Kind; report: Report
           {row.fields.map(([title, value]) => <List.Item.Detail.Metadata.Label key={title} title={title} text={value} />)}
         </List.Item.Detail.Metadata>} />}
         actions={<ActionPanel>
+          <ExportPngAction card={{
+            title: titles[kind],
+            subtitle: `${period} · ${report.period.from ?? "All time"} — ${report.period.to}`,
+            generatedAt: report.generatedAt,
+            stats: kind === "costs" ? [{ label: "Estimated API Cost · All Models", value: money(report.costEstimate.totalCost) }] : [],
+            rows: rows.map((entry) => ({ name: kind === "projects" ? entry.detail : entry.name, value: entry.value })),
+            note: `${note}${search ? ` Filter: ${search}` : ""}`,
+          }} />
           <Action.CopyToClipboard title="Copy Summary" content={`${row.name} · ${period}\n${row.fields.map(([title, value]) => `${title}: ${value}`).join("\n")}\n${note}`} />
           <Action.CopyToClipboard title="Copy Name" content={row.name} shortcut={{ modifiers: ["cmd", "shift"], key: "c" }} />
           <Action.CopyToClipboard title="Copy Value" content={row.value} />

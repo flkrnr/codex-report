@@ -2,7 +2,8 @@ import { Action, ActionPanel, Detail, Icon, Toast, environment, showToast } from
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { useEffect, useState } from "react";
-import { Bar, barChart, compact } from "./charts";
+import { Bar, barChart, barChartImage, compact } from "./charts";
+import { ExportPngAction } from "./export-png";
 import local from "./local.json";
 import { Breakdown } from "./breakdown";
 import { Report, money } from "./report-data";
@@ -114,6 +115,21 @@ export default function Command() {
         {(Object.keys(periods) as Period[]).map((value, index) => <Action key={value} title={periods[value]} icon={value === period ? Icon.CheckCircle : Icon.Calendar} shortcut={{ modifiers: ["cmd"], key: String(index + 1) as "1" | "2" | "3" }} onAction={() => changePeriod(value)} />)}
       </ActionPanel.Section>
       <Action title={metric === "tokens" ? "Show Messages" : "Show Tokens"} icon={Icon.BarChart} onAction={() => setMetric(metric === "tokens" ? "messages" : "tokens")} />
+      {report && <ExportPngAction card={{
+        title: periods[period],
+        subtitle: `${report.period.from ?? "All time"} — ${report.period.to} · Activity by ${metric}`,
+        generatedAt: report.generatedAt,
+        stats: [
+          { label: "Messages", value: report.messages.toLocaleString("en-US") },
+          { label: "Tokens", value: compact(report.tokens.total_tokens) },
+          { label: report.costEstimate.unpricedModels.length ? "Estimated API Cost · Partial" : "Estimated API Cost", value: money(report.costEstimate.totalCost) },
+          { label: "Sessions", value: String(report.sessions) },
+          { label: "Cached Input Share", value: report.tokens.input_tokens ? `${(100 * report.tokens.cached_input_tokens / report.tokens.input_tokens).toFixed(1)}%` : "—" },
+          { label: "Fast Mode · Known Turns", value: report.insights.fastModePercent == null ? "Unavailable" : `${report.insights.fastModePercent}%` },
+        ],
+        chart: barChartImage(`Activity · ${unit}`, activityBars(dates, report, metric, period === "month")),
+        note: `${error ? "Refresh failed. Showing the last successful report. " : ""}API-equivalent estimate, not subscription charges.${report.costEstimate.unpricedModels.length ? " Unpriced models are excluded." : ""}`,
+      }} />}
       {report && <Action.CopyToClipboard title="Copy Summary" shortcut={{ modifiers: ["cmd", "shift"], key: "c" }} content={`${periods[period]}: ${report.messages.toLocaleString("en-US")} messages · ${compact(report.tokens.total_tokens)} tokens · ${report.sessions} sessions · ${money(report.costEstimate.totalCost)} estimated API cost${report.costEstimate.unpricedModels.length ? " (partial)" : ""}`} />}
       {report && <Action.CopyToClipboard title="Copy Report as JSON" content={JSON.stringify(report, null, 2)} />}
     </ActionPanel>} />;
