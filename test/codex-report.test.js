@@ -403,7 +403,7 @@ test("applies current standard prices for GPT-6 and GPT-5.6 models to selected u
 
   const sessionDir = path.join(home, ".codex", "sessions");
   await fs.mkdir(sessionDir, { recursive: true });
-  const models = ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
+  const models = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
   for (const [index, model] of models.entries()) {
     await fs.writeFile(path.join(sessionDir, `${index}.jsonl`), [
       event("2026-08-14T08:00:00Z", "session_meta", { id: `pricing-${index}`, cwd: REPO_ROOT }),
@@ -425,13 +425,14 @@ test("applies current standard prices for GPT-6 and GPT-5.6 models to selected u
 
   const output = await runReport(home, ["--global", "--costs", "--from", "2026-08-14", "--to", "2026-08-14"]);
   assert.match(output, /gpt-6-astra\s+\$61\.00/);
+  assert.match(output, /gpt-6\.1-sol\s+\$12\.10/);
   assert.match(output, /gpt-6-sol\s+\$12\.20/);
   assert.match(output, /gpt-6-luna\s+\$0\.61\s/);
   assert.match(output, /gpt-5\.6\s+\$24\.40/);
   assert.match(output, /gpt-5\.6-sol\s+\$24\.40/);
   assert.match(output, /gpt-5\.6-terra\s+\$14\.20/);
   assert.match(output, /gpt-5\.6-luna\s+\$1\.42\s/);
-  assert.match(output, /Total estimated API cost: \$138\.23\n/);
+  assert.match(output, /Total estimated API cost: \$150\.33\n/);
   assert.doesNotMatch(output, /Unpriced models:/);
 });
 

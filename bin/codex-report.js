@@ -25,6 +25,8 @@ const TOKEN_KEYS = [
 // Standard OpenAI API text-token list prices in USD per 1M tokens.
 // Sources: developers.openai.com model pages and openai.com/api/pricing, checked 2026-08-15.
 const MODEL_PRICES_USD_PER_1M = new Map([
+  // GPT-6.1 Sol: official model page, checked 2026-09-30.
+  ["gpt-6.1-sol", { input: 2, cachedInput: 0.1, output: 10 }],
   // GPT-6 and GPT-5.6 Sol: official model pages, checked 2026-09-24.
   ["gpt-6-astra", { input: 10, cachedInput: 1, output: 50 }],
   ["gpt-6-sol", { input: 2, cachedInput: 0.2, output: 10 }],
