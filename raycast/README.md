@@ -85,6 +85,10 @@ or modifying the CLI.
 
 The extension reuses the CLI parser and cache in `~/.codex/cache` and `~/.claude/cache`; it does not
 run a separate server. A cold scan can take longer, just as it does in the CLI.
+A bounded Raycast cache keeps successful reports across command openings.
+Previously loaded periods display immediately while a fresh report loads in the
+background; the heatmap marks this state. A new period still needs an initial
+scan. Refresh clears saved reports for every window and agent.
 During refresh, the previous report stays visible. If refresh fails, that report
 is explicitly marked as the last successful result.
 

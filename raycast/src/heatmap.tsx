@@ -30,6 +30,7 @@ export default function HeatmapCommand() {
 ${range.from} — ${range.to}`,
     image ? imageMarkdown("Activity heatmap", image, months === 12 ? 1000 : image.width) : error ? "Could not load activity. Press ⌘R to retry." : "Reading local sessions…",
     `${activeDays} active days · ${formatValue(total)} ${metrics[metric].toLowerCase()}`,
+    loading && report ? "Updating local sessions… Showing the last successful report." : "",
     note,
     costNote,
     error && report ? "Refresh failed. Showing the last successful report." : "",
