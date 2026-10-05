@@ -672,3 +672,30 @@ test("category costs reuse cached tokens and preserve unpriced usage and date ra
   assert.deepEqual(uncached.days, report.days);
   assert.deepEqual(uncached.repositories, report.repositories);
 });
+
+test("Sources and Providers respect --top in dashboard and section output", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const sessionDir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  for (let index = 1; index <= 4; index++) {
+    const events = [
+      event("2026-08-14T08:00:00Z", "session_meta", {
+        id: `session-${index}`, cwd: REPO_ROOT,
+        originator: `source-${index}`, model_provider: `provider-${index}`,
+      }),
+      event("2026-08-14T08:01:00Z", "event_msg", { type: "user_message", message: "hello" }),
+    ];
+    await fs.writeFile(path.join(sessionDir, `session-${index}.jsonl`), events.join("\n"));
+  }
+  for (const sections of [[], ["--sources", "--providers"]]) {
+    const args = ["--global", "--from", "2026-08-14", "--to", "2026-08-14", ...sections];
+    const expanded = await runReport(home, [...args, "--top", "100"]);
+    assert.match(expanded, /source-4/);
+    assert.match(expanded, /provider-4/);
+    const limited = await runReport(home, [...args, "--top", "2"]);
+    assert.match(limited, /source-2/);
+    assert.match(limited, /provider-2/);
+    assert.doesNotMatch(limited, /source-3|source-4|provider-3|provider-4/);
+  }
+});

@@ -88,6 +88,8 @@ Limit top lists with `--top`:
 codex-report --top 5
 ```
 
+Ranked sections show up to `--top` named entries, followed by `Other (N)` when entries remain. `N` counts the grouped categories; their usage is summed beside the label, and percentages use the full section total. Skill-read rankings apply the limit within each scope; their grouped session counts sum per-skill session counts. JSON retains every individual entry.
+
 Bypass the local parsed-session cache:
 
 ```bash
