@@ -162,10 +162,12 @@ Claude Code counting rules:
   settings display as unavailable, and JSON exposes the eligible counts.
 
 `--json` emits one JSON object on stdout, with diagnostics on stderr. Schema
-version 1 retains the Raycast fields and adds `selectedAgents`, `agents`,
+version 1 retains the Raycast fields and adds `selectedAgents`, `agents`, `agentDays`,
 `availability`, `sources`, `providers`, `skills`, exact `timestampRange`, insight
 coverage, cost assumptions, and cache-write token fields. Terminal and JSON outputs
-use the same aggregated report. `--clear-cache --json` emits `{ "clearedCacheFiles": N }`.
+use the same aggregated report. `agentDays` contains messages, tokens, and cost
+coverage per date and agent; these contributions sum to the daily totals.
+`--clear-cache --json` emits `{ "clearedCacheFiles": N }`.
 
 See [Agent adapters](docs/agent-adapters.md) for the implementation boundary and
 how to add another local agent.

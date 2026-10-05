@@ -192,6 +192,19 @@ test("mixed reports keep default Codex behavior, inclusive tokens and eligible i
   assert.equal(mixed.sessions, 2);
   assert.equal(mixed.messages, 3);
   assert.equal(mixed.tokens.total_tokens, 450);
+  assert.deepEqual(mixed.agentDays.map(({ cost, ...activity }) => activity), [
+    { date: "2026-08-14", agent: "claude", messages: 2, tokens: 340 },
+    { date: "2026-08-14", agent: "codex", messages: 1, tokens: 110 },
+  ]);
+  for (const daily of mixed.days) {
+    const contributions = mixed.agentDays.filter((entry) => entry.date === daily.date);
+    assert.equal(contributions.reduce((sum, entry) => sum + entry.tokens, 0), daily.tokens);
+    assert.equal(contributions.reduce((sum, entry) => sum + entry.messages, 0), daily.messages);
+    assert.ok(Math.abs(contributions.reduce((sum, entry) => sum + entry.cost.totalCost, 0) - daily.cost.totalCost) < 1e-12);
+  }
+  const uncached = JSON.parse((await run(home, ["--agent", "all", "--json", "--no-cache", ...WINDOW])).stdout);
+  assert.deepEqual(uncached.agentDays, mixed.agentDays);
+
   assert.equal(mixed.insights.fastModePercent, 100);
   assert.equal(mixed.insights.knownServiceTierTurns, 1);
   assert.equal(mixed.agents.reduce((sum, a) => sum + a.tokens.total_tokens, 0), 450);
