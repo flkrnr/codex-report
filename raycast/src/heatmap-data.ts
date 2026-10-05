@@ -5,7 +5,7 @@ export type HeatmapMonths = 6 | 12;
 export type HeatmapRange = { from: string; to: string; title: string };
 export type HeatmapCell = {
   date: string; week: number; weekday: number; inRange: boolean;
-  value: number; cost: CostSummary; agents: Agent[]; contributions: Report["agentDays"];
+  value: number; cost: CostSummary; dominantAgent?: Agent | "tie"; contributions: Report["agentDays"];
 };
 export type Heatmap = {
   cells: HeatmapCell[]; weeks: number; thresholds: number[];
@@ -21,6 +21,13 @@ export function heatmapRange(months: HeatmapMonths, offset: number, now = new Da
 function metricValue(activity: Report["days"][number] | undefined, metric: Metric): number {
   if (!activity) return 0;
   return metric === "costs" ? activity.cost.totalCost : activity[metric];
+}
+
+function dominantAgent(entries: Report["agentDays"], metric: Metric): HeatmapCell["dominantAgent"] {
+  const peak = Math.max(0, ...entries.map((entry) => metricValue(entry, metric)));
+  if (peak === 0) return undefined;
+  const winners = entries.filter((entry) => metricValue(entry, metric) === peak);
+  return winners.length > 1 ? "tie" : winners[0].agent;
 }
 
 export function heatmapLevel(value: number, thresholds: number[]): number {
@@ -59,7 +66,7 @@ export function buildHeatmap(report: Report, range: HeatmapRange, agent: AgentSe
         pricedTokens: sum.pricedTokens + entry.cost.pricedTokens,
         unpricedTokens: sum.unpricedTokens + entry.cost.unpricedTokens,
       }), { totalCost: 0, pricedTokens: 0, unpricedTokens: 0 }),
-      agents: [...new Set(visible.map((entry) => entry.agent))], contributions: daily,
+      dominantAgent: dominantAgent(visible, metric), contributions: daily,
     });
     cursor.setDate(cursor.getDate() + 1);
   }

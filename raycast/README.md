@@ -70,9 +70,10 @@ window are omitted. Four intensity levels use the combined daily peak divided
 by 64, 16, and 4, then the peak itself. These thresholds stay fixed when switching
 agents (⌘4 / ⌘5 / ⌘6), so their usage remains comparable.
 
-Mixed days have fixed blue/orange diagonal halves showing that both agents were
-present. The halves do not represent equal usage; their shared intensity shows
-the combined daily total. **Show Daily Activity** opens a searchable native list
+Each day uses the color of the agent with the largest value for the selected
+metric. Exact ties use purple, labeled **Equal share** in the legend when present.
+Intensity shows the combined daily total, so the color indicates the winner
+rather than its share; both contributions remain available in the details. **Show Daily Activity** opens a searchable native list
 with exact totals and each agent's recorded usage. Cost views flag partial
 estimates and exclude unpriced usage. Export as PNG includes the selected view
 and its legend.

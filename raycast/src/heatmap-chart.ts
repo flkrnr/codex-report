@@ -4,6 +4,7 @@ import { escapeXml } from "./svg";
 import { Heatmap, HeatmapCell, heatmapLevel } from "./heatmap-data";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const TIE_COLOR = "#A78BFA";
 const OPACITY = [0, 0.35, 0.55, 0.75, 1];
 const LEFT = 38;
 const TOP = 54;
@@ -15,18 +16,11 @@ function cellSvg(cell: HeatmapCell, map: Heatmap, size: number, gap: number, tra
   const rect = `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="${Math.min(4, size / 4)}"`;
   const base = `${rect} fill="${track}"/>`;
   const level = heatmapLevel(cell.value, map.thresholds);
-  if (level === 0) return base;
-  const title = `<title>${cell.date}: ${cell.value} ${metrics[map.metric].toLowerCase()}</title>`;
-  if (cell.agents.length < 2) {
-    const color = agentColors[cell.agents[0] ?? "codex"];
-    return `${base}<g opacity="${OPACITY[level]}">${title}${rect} fill="${color}"/></g>`;
-  }
-  // Fixed diagonal halves indicate presence, not a 50/50 share. The same opacity
-  // on both halves represents the combined daily total, independently of ratio.
-  const id = `mixed-${cell.date}`;
-  return `${base}<clipPath id="${id}">${rect}/></clipPath><g clip-path="url(#${id})" opacity="${OPACITY[level]}">${title}
-    <path d="M${x},${y} H${x + size} L${x},${y + size} Z" fill="${agentColors.codex}"/>
-    <path d="M${x + size},${y} V${y + size} H${x} Z" fill="${agentColors.claude}"/></g>`;
+  if (level === 0 || !cell.dominantAgent) return base;
+  const color = cell.dominantAgent === "tie" ? TIE_COLOR : agentColors[cell.dominantAgent];
+  const label = cell.dominantAgent === "tie" ? "Equal share" : agentLabels[cell.dominantAgent];
+  const title = `<title>${cell.date}: ${cell.value} ${metrics[map.metric].toLowerCase()} · ${label}</title>`;
+  return `${base}<g opacity="${OPACITY[level]}">${title}${rect} fill="${color}"/></g>`;
 }
 
 function monthLabels(map: Heatmap, size: number, gap: number, muted: string): string {
@@ -50,7 +44,9 @@ export function heatmapImage(map: Heatmap, dark: boolean, formatValue: (value: n
   const bottom = TOP + 7 * (size + gap);
   const days = WEEKDAYS.map((label, index) => `<text x="0" y="${TOP + index * (size + gap) + size * 0.8}" fill="${muted}" font-size="10">${label}</text>`).join("");
   const agents = map.agent === "all" ? ["codex", "claude"] as const : [map.agent];
-  const legend = agents.map((agent, index) => `<circle cx="${LEFT + index * 95}" cy="${bottom + 15}" r="4" fill="${agentColors[agent]}"/><text x="${LEFT + index * 95 + 10}" y="${bottom + 19}" fill="${muted}" font-size="11">${agentLabels[agent]}</text>`).join("");
+  const legendItems = agents.map((agent) => ({ label: agentLabels[agent], color: agentColors[agent] }));
+  if (map.cells.some((cell) => cell.inRange && cell.dominantAgent === "tie")) legendItems.push({ label: "Equal share", color: TIE_COLOR });
+  const legend = legendItems.map((item, index) => `<circle cx="${LEFT + index * 95}" cy="${bottom + 15}" r="4" fill="${item.color}"/><text x="${LEFT + index * 95 + 10}" y="${bottom + 19}" fill="${muted}" font-size="11">${item.label}</text>`).join("");
   const scale = map.thresholds[3] === 0 ? `<text x="${LEFT}" y="${bottom + 41}" fill="${muted}" font-size="10">${map.metric === "costs" ? "No priced costs" : "No usage for this metric"}</text>` : map.thresholds.map((value, index) => {
     const x = LEFT + index * 125;
     return `<rect x="${x}" y="${bottom + 32}" width="11" height="11" rx="2" fill="${track}"/><rect x="${x}" y="${bottom + 32}" width="11" height="11" rx="2" fill="${text}" opacity="${OPACITY[index + 1]}"/><text x="${x + 16}" y="${bottom + 41}" fill="${muted}" font-size="10">≤ ${escapeXml(formatValue(value))}</text>`;

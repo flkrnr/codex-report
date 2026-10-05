@@ -35,7 +35,7 @@ test("agent filtering preserves shared scale and combines mixed-day totals", () 
   assert.deepEqual(all.thresholds, [100, 400, 1600, 6400]);
   const mixed = all.cells.find((cell) => cell.date === "2026-03-02");
   assert.equal(mixed.value, 6400);
-  assert.deepEqual(mixed.agents, ["codex", "claude"]);
+  assert.equal(mixed.dominantAgent, "codex");
   assert.equal(claude.cells.find((cell) => cell.date === mixed.date).value, 100);
   assert.equal(heatmapLevel(0, all.thresholds), 0);
   assert.equal(heatmapLevel(100, all.thresholds), 1);
@@ -56,8 +56,49 @@ test("unpriced usage stays visible in coverage without inventing costs", () => {
   const day = map.cells.find((cell) => cell.date === unknown.date);
   assert.equal(day.value, 0);
   assert.equal(day.cost.unpricedTokens, 900);
+  assert.equal(day.dominantAgent, undefined);
   assert.equal(heatmapLevel(day.value, map.thresholds), 0);
   assert.equal(buildHeatmap(data, range, "codex", "costs").cells.find((cell) => cell.date === unknown.date).cost.unpricedTokens, 0);
+});
+
+test("dominant color follows the selected metric while intensity uses the daily total", () => {
+  const date = "2026-03-02";
+  const data = {
+    days: [{ date, tokens: 100, messages: 10, cost: cost(100) }],
+    agentDays: [
+      { ...contribution(date, "codex", 80, 2), cost: cost(40) },
+      { ...contribution(date, "claude", 20, 8), cost: cost(60) },
+    ],
+  };
+  for (const [metric, winner, total] of [["tokens", "codex", 100], ["messages", "claude", 10], ["costs", "claude", 100]]) {
+    const map = buildHeatmap(data, range, "all", metric);
+    const day = map.cells.find((cell) => cell.date === date);
+    assert.equal(day.dominantAgent, winner);
+    assert.equal(day.value, total);
+    assert.equal(heatmapLevel(day.value, map.thresholds), 4);
+  }
+});
+
+test("ties have a separate color, filters select their own agent, and small majorities still win", () => {
+  const date = "2026-03-02";
+  const data = {
+    days: [{ date, tokens: 100, messages: 2, cost: cost(1) }],
+    agentDays: [contribution(date, "codex", 50), contribution(date, "claude", 50)],
+  };
+  const tied = buildHeatmap(data, range, "all", "tokens");
+  assert.equal(tied.cells.find((cell) => cell.date === date).dominantAgent, "tie");
+  const image = heatmapImage(tied, true, String);
+  assert.ok(image.body.includes("Equal share"));
+  const tieColor = image.body.match(/<circle[^>]*fill="([^"]+)"\/><text[^>]*>Equal share<\/text>/)[1];
+  assert.ok(image.body.includes(`fill="${tieColor}"/></g>`));
+  for (const agent of ["codex", "claude"]) {
+    const filtered = buildHeatmap(data, range, agent, "tokens");
+    assert.equal(filtered.cells.find((cell) => cell.date === date).dominantAgent, agent);
+    assert.deepEqual(filtered.thresholds, tied.thresholds);
+    assert.ok(!heatmapImage(filtered, true, String).body.includes("Equal share"));
+  }
+  data.agentDays = [contribution(date, "claude", 49), contribution(date, "codex", 51)];
+  assert.equal(buildHeatmap(data, range, "all", "tokens").cells.find((cell) => cell.date === date).dominantAgent, "codex");
 });
 
 test("window navigation handles current partial months and past year boundaries", () => {
@@ -70,16 +111,16 @@ test("window navigation handles current partial months and past year boundaries"
 test("empty periods have no intensity and do not invent activity", () => {
   const map = buildHeatmap({ days: [], agentDays: [] }, range, "all", "tokens");
   assert.deepEqual(map.thresholds, [0, 0, 0, 0]);
-  assert.ok(map.cells.every((cell) => cell.value === 0 && cell.agents.length === 0));
+  assert.ok(map.cells.every((cell) => cell.value === 0 && cell.dominantAgent === undefined));
 });
 
-test("SVG labels both axes and represents mixed cells with two clipped triangles", () => {
+test("SVG labels both axes and renders single-color cells without split geometry", () => {
   const map = buildHeatmap(report, range, "all", "tokens");
   const image = heatmapImage(map, true, (value) => String(value));
   assert.equal(image.width, 560);
   for (const label of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Mar", "Codex", "Claude"]) assert.ok(image.body.includes(label));
-  assert.ok(image.body.includes('id="mixed-2026-03-02"'));
-  assert.equal((image.body.match(/<path /g) || []).length, 2);
+  assert.ok(!image.body.includes("<clipPath"));
+  assert.ok(!image.body.includes("<path "));
   assert.ok(image.body.includes('fill="#228cf6"'));
   assert.ok(image.body.includes('fill="#D97757"'));
   assert.ok(image.body.includes('opacity="1"'));

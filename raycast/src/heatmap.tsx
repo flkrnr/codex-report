@@ -24,7 +24,7 @@ export default function HeatmapCommand() {
   const total = map?.cells.filter((cell) => cell.inRange).reduce((sum, cell) => sum + cell.value, 0) ?? 0;
   const unpriced = map?.cells.some((cell) => cell.inRange && cell.cost.unpricedTokens > 0);
   const costNote = metric === "costs" ? `API-equivalent estimates; unpriced usage is excluded.${unpriced ? " This is a partial estimate." : ""} See Daily Activity for coverage.` : "";
-  const note = "Grey = zero usage. Split cells indicate both agents, not their shares. Intensity shows daily usage on a shared scale across agent filters.";
+  const note = "Grey = zero usage. Color shows the dominant agent for the selected metric; purple indicates equal shares. Intensity shows the daily total on a shared scale across agent filters.";
   const markdown = [
     `## ${range.title} · ${agentLabels[agent]}
 ${range.from} — ${range.to}`,
