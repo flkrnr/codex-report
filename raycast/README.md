@@ -57,6 +57,26 @@ settings. Costs use the existing CLI API-equivalent estimates, including its
 Reserve alias; they do not represent subscription fees. The cached-input share
 is calculated relative to input tokens.
 
+## Activity heatmap
+
+Open **Show Activity Heatmap** directly or use the dashboard's Actions menu.
+It defaults to tokens, both agents, and six calendar months ending today.
+Actions switch to twelve months, messages, or estimated API costs. ⌘← / ⌘→
+move between windows; changing the window size returns to the current period.
+
+Columns are weeks, Monday through Sunday. Month and weekday labels identify
+both axes. Grey means zero usage for the selected metric; dates outside the
+window are omitted. Four intensity levels use the combined daily peak divided
+by 64, 16, and 4, then the peak itself. These thresholds stay fixed when switching
+agents (⌘4 / ⌘5 / ⌘6), so their usage remains comparable.
+
+Mixed days have fixed blue/orange diagonal halves showing that both agents were
+present. The halves do not represent equal usage; their shared intensity shows
+the combined daily total. **Show Daily Activity** opens a searchable native list
+with exact totals and each agent's recorded usage. Cost views flag partial
+estimates and exclude unpriced usage. Export as PNG includes the selected view
+and its legend.
+
 ## Local development
 
 `prepare.mjs` copies the existing CLI into the extension assets and records the
@@ -73,6 +93,7 @@ Validate the extension with:
 ```sh
 npm run build
 npm run typecheck
+npm test
 ```
 
 Category costs reuse cached model-token totals without changing the cache format.
