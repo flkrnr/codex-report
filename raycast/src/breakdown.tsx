@@ -3,23 +3,31 @@ import { basename } from "node:path";
 import { useState } from "react";
 import { ExportPngAction } from "./export-png";
 import { compact } from "./charts";
-import { count, money, Report, share } from "./report-data";
+import { count, money, Report, share, costLabel, costSortValue } from "./report-data";
 
 type Kind = "models" | "costs" | "efforts" | "projects";
 const titles: Record<Kind, string> = { models: "Models", costs: "Estimated API Costs", efforts: "Reasoning Efforts", projects: "Projects" };
 type Row = { name: string; value: string; detail: string; fields: [string, string][] };
 
-function rowsFor(kind: Kind, report: Report, byTurns: boolean): Row[] {
+function rowsFor(kind: Kind, report: Report, sortBy: string): Row[] {
   if (kind === "projects") {
-    return report.repositories.map((project) => ({ name: basename(project.name) || project.name, value: `${count(project.sessions)} sessions`, detail: project.name, fields: [["Repository / Directory", project.name], ["Sessions", count(project.sessions)]] }));
+    return [...report.repositories]
+      .sort((a, b) => sortBy === "cost" ? costSortValue(b.cost) - costSortValue(a.cost) : b.sessions - a.sessions)
+      .map((project) => ({
+        name: basename(project.name) || project.name,
+        value: sortBy === "cost" ? costLabel(project.cost) : `${count(project.sessions)} sessions`,
+        detail: project.name,
+        fields: [["Repository / Directory", project.name], ["Sessions", count(project.sessions)], ["Estimated API Cost", costLabel(project.cost)]],
+      }));
   }
   if (kind === "models") {
+    const byTurns = sortBy === "turns";
     const total = report.models.reduce((sum, model) => sum + (byTurns ? model.turns : model.tokens), 0);
-    return [...report.models].sort((a, b) => byTurns ? b.turns - a.turns : b.tokens - a.tokens).map((model) => ({
+    return [...report.models].sort((a, b) => sortBy === "cost" ? costSortValue(b.cost) - costSortValue(a.cost) : byTurns ? b.turns - a.turns : b.tokens - a.tokens).map((model) => ({
       name: model.name,
-      value: `${compact(byTurns ? model.turns : model.tokens)} ${byTurns ? "turns" : "tokens"}`,
+      value: sortBy === "cost" ? costLabel(model.cost) : `${compact(byTurns ? model.turns : model.tokens)} ${byTurns ? "turns" : "tokens"}`,
       detail: share(byTurns ? model.turns : model.tokens, total),
-      fields: [["Tokens", count(model.tokens)], ["Turns", count(model.turns)], ["Share", share(byTurns ? model.turns : model.tokens, total)]],
+      fields: [["Tokens", count(model.tokens)], ["Turns", count(model.turns)], [byTurns ? "Turn Share" : "Token Share", share(byTurns ? model.turns : model.tokens, total)], ["Estimated API Cost", costLabel(model.cost)]],
     }));
   }
   if (kind === "costs") {
@@ -48,13 +56,16 @@ function rowsFor(kind: Kind, report: Report, byTurns: boolean): Row[] {
 }
 
 export function Breakdown({ kind, report, period }: { kind: Kind; report: Report; period: string }) {
-  const [byTurns, setByTurns] = useState(false);
+  const [sortBy, setSortBy] = useState(kind === "projects" ? "sessions" : "tokens");
   const [search, setSearch] = useState("");
   const terms = search.toLowerCase().split(/\s+/).filter(Boolean);
-  const rows = rowsFor(kind, report, byTurns).filter((row) => terms.every((term) => `${row.name} ${row.detail}`.toLowerCase().includes(term)));
-  const note = kind === "costs" ? "API estimate, not subscription charges. Unpriced models are excluded." : kind === "efforts" ? "Distribution of recorded reasoning settings. Missing settings are excluded." : "Usage recorded in local Codex sessions.";
+  const rows = rowsFor(kind, report, sortBy).filter((row) => terms.every((term) => `${row.name} ${row.detail}`.toLowerCase().includes(term)));
+  const note = kind !== "efforts" ? "API estimate, not subscription charges. Unpriced models are excluded." : "Distribution of recorded reasoning settings. Missing settings are excluded.";
   return <List isShowingDetail filtering={false} onSearchTextChange={setSearch} navigationTitle={`${titles[kind]} · ${period}`} searchBarPlaceholder={`Filter ${kind === "efforts" ? "reasoning efforts" : kind === "projects" ? "projects" : "models"}…`}
-    searchBarAccessory={kind === "models" ? <List.Dropdown tooltip="Sort Models" value={byTurns ? "turns" : "tokens"} onChange={(value) => setByTurns(value === "turns")}><List.Dropdown.Item title="By Tokens" value="tokens" /><List.Dropdown.Item title="By Turns" value="turns" /></List.Dropdown> : undefined}>
+    searchBarAccessory={kind === "models" || kind === "projects" ? <List.Dropdown tooltip="Sort By" value={sortBy} onChange={setSortBy}>
+      {kind === "models" ? <List.Dropdown.Section><List.Dropdown.Item title="By Tokens" value="tokens" /><List.Dropdown.Item title="By Turns" value="turns" /></List.Dropdown.Section> : <List.Dropdown.Item title="By Sessions" value="sessions" />}
+      <List.Dropdown.Item title="By Cost" value="cost" />
+    </List.Dropdown> : undefined}>
     <List.EmptyView title="No Data for This Period" description="Go back and choose another period." icon={Icon.BarChart} />
     <List.Section title={period} subtitle={kind === "costs" ? `${money(report.costEstimate.totalCost)}${report.costEstimate.unpricedModels.length ? " · partial estimate" : " estimated"}` : `${rows.length} ${kind}`}>
       {rows.map((row) => <List.Item key={`${row.name}-${row.detail}`} title={row.name} icon={kind === "costs" ? Icon.Coins : kind === "efforts" ? Icon.LightBulb : kind === "projects" ? Icon.Folder : Icon.Layers} accessories={[{ text: row.value, tooltip: row.detail }]}

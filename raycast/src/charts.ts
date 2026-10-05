@@ -1,7 +1,7 @@
 import { environment } from "@raycast/api";
 import type { SvgImage } from "./png";
 
-export type Bar = { label: string; value: number; group?: string; weekday?: string };
+export type Bar = { label: string; value: number; group?: string; weekday?: string; displayValue?: string };
 export const compact = (value: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
 export const escapeXml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -12,6 +12,7 @@ export function barChartImage(title: string, bars: Bar[]): SvgImage {
   const track = dark ? "#303030" : "#eeeeee";
   const accent = dark ? "#228cf6" : "#0a7ff5";
   const max = Math.max(...bars.map((bar) => bar.value), 1);
+  const barWidth = bars.some((bar) => bar.displayValue !== undefined) ? 220 : 280;
   let y = 40;
   const rows = bars.map((bar, index) => {
     let heading = "";
@@ -24,9 +25,9 @@ export function barChartImage(title: string, bars: Bar[]): SvgImage {
     const label = bar.label.length > 23 ? `${bar.label.slice(0, 22)}…` : bar.label;
     const weekday = bar.weekday ? `<text x="0" y="${y}" fill="${muted}" font-size="12">${escapeXml(bar.weekday)}</text>` : "";
     const row = `${heading}${weekday}<text x="${bar.weekday ? 34 : 0}" y="${y}" fill="${muted}" font-size="12" font-variant-numeric="tabular-nums">${escapeXml(label)}</text>
-      <rect x="170" y="${y - 10}" width="280" height="11" rx="3" fill="${track}"/>
-      <rect x="170" y="${y - 10}" width="${280 * bar.value / max}" height="11" rx="3" fill="${accent}"/>
-      <text x="550" y="${y}" text-anchor="end" fill="${text}" font-size="12">${compact(bar.value)}</text>`;
+      <rect x="170" y="${y - 10}" width="${barWidth}" height="11" rx="3" fill="${track}"/>
+      <rect x="170" y="${y - 10}" width="${barWidth * bar.value / max}" height="11" rx="3" fill="${accent}"/>
+      <text x="550" y="${y}" text-anchor="end" fill="${text}" font-size="12">${escapeXml(bar.displayValue ?? compact(bar.value))}</text>`;
     y += 31;
     return row;
   }).join("");
