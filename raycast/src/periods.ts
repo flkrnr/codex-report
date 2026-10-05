@@ -18,10 +18,7 @@ export function periodRange(period: Period, offset: number, now = new Date()) {
   if (period === "month") end.setMonth(end.getMonth() + 1, 0);
   const from = day(start);
   const to = offset === 0 ? day(now) : day(end);
-  const formatted = start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const title = offset === 0 ? periods[period] : period === "month"
-    ? start.toLocaleDateString("en-US", { month: "long", year: "numeric" })
-    : period === "week" ? `Week of ${formatted}` : formatted;
+  const title = periodTitle(period, offset, start);
   const dates: string[] = [];
   const cursor = new Date(start);
   while (day(cursor) <= to) {
@@ -29,4 +26,11 @@ export function periodRange(period: Period, offset: number, now = new Date()) {
     cursor.setDate(cursor.getDate() + 1);
   }
   return { from, to, dates, title };
+}
+
+function periodTitle(period: Period, offset: number, start: Date): string {
+  if (offset === 0) return periods[period];
+  if (period === "month") return start.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const formatted = start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return period === "week" ? `Week of ${formatted}` : formatted;
 }
