@@ -41,7 +41,7 @@ test("activity remainder sums both messages and tokens in either format", () => 
     boxed(activitySection, "Activity", days, 1),
     plainActivitySection("Activity", days, 1).join("\n"),
   ]) {
-    assert.match(otherLine(output), /Other \(2\).*3 msg.*50 tok.*27%/);
+    assert.match(otherLine(output), /Other \(2\).*3 msg.*50 tok.*33%/);
     assert.doesNotMatch(output, /2026-08-15|2026-08-16/);
   }
 });
@@ -132,5 +132,22 @@ test("cost columns align across different token magnitudes and terminal widths",
     for (const marker of [" in ·", " cached ·", " out"]) {
       assert.equal(new Set(rows.map((line) => line.indexOf(marker))).size, 1, marker);
     }
+  }
+});
+
+
+test("activity ranks by tokens rather than messages, including token-only days", () => {
+  const days = new Map([
+    ["2026-08-14", { messages: 20, tokens: 100 }],
+    ["2026-08-15", { messages: 0, tokens: 800 }],
+    ["2026-08-16", { messages: 2, tokens: 100 }],
+  ]);
+  for (const output of [
+    boxed(activitySection, "Activity", days, 1),
+    plainActivitySection("Activity", days, 1).join("\n"),
+  ]) {
+    assert.match(output, /2026-08-15.*0 msg.*800 tok.*80%/);
+    assert.match(otherLine(output), /Other \(2\).*22 msg.*200 tok.*20%/);
+    assert.doesNotMatch(output, /2026-08-14|2026-08-16/);
   }
 });
