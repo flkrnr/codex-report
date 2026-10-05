@@ -23,7 +23,7 @@
   "files": [
     "bin",
     "lib",
-    "docs",
+    "docs/*.md",
     "README.md"
   ],
   "bin": {

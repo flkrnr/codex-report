@@ -34,6 +34,33 @@ Remove the global install:
 npm uninstall -g codex-report
 ```
 
+## Raycast support (local MVP)
+
+An experimental Raycast extension is included for local installation and testing
+on macOS. It is **not available in the Raycast Store** and is not included in the
+npm package. It requires Raycast, Git, and Node.js >= 20.
+
+Install from a source checkout:
+
+```bash
+git clone https://github.com/flkrnr/codex-report.git
+cd codex-report/raycast
+npm ci
+npm run dev
+```
+
+Open Raycast and search for **Show Codex Report**. The development command
+imports the extension locally and reloads changes automatically. After stopping
+it with Ctrl+C, the last built command remains available in Raycast.
+
+The dashboard shows daily activity, estimated costs, models, reasoning efforts,
+and projects grouped by repository. Use ⌘1/2/3 for today, this week, or this month,
+and ⌘←/⌘→ to move between periods. Reports can be exported as PNGs to Downloads
+and copied to the clipboard. The extension reuses the CLI parser and local cache.
+
+For more shortcuts and development details, see the
+[Raycast README](https://github.com/flkrnr/codex-report/blob/main/raycast/README.md).
+
 ## Usage
 
 Report the current folder from the beginning of the available local data
