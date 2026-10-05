@@ -28,7 +28,7 @@ export default function HeatmapCommand() {
   const markdown = [
     `## ${range.title} · ${agentLabels[agent]}
 ${range.from} — ${range.to}`,
-    image ? imageMarkdown("Activity heatmap", image) : error ? "Could not load activity. Press ⌘R to retry." : "Reading local sessions…",
+    image ? imageMarkdown("Activity heatmap", image, months === 12 ? 1000 : image.width) : error ? "Could not load activity. Press ⌘R to retry." : "Reading local sessions…",
     `${activeDays} active days · ${formatValue(total)} ${metrics[metric].toLowerCase()}`,
     note,
     costNote,
