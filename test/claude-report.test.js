@@ -78,7 +78,7 @@ test("normalizes Claude tokens, cache write durations, reasoning and pricing", a
   assert.equal(json.insights.knownServiceTierTurns, 1);
   assert.deepEqual(json.providers, [{ name: "anthropic", sessions: 1 }]);
   const { stdout } = await run(home, ["--agent", "claude", "--costs", ...WINDOW]);
-  assert.match(stdout, /330 in · 200 cached · 10 out/);
+  assert.match(stdout, /330 in ·\s+200 cached ·\s+10 out/);
   assert.doesNotMatch(stdout, /cache writes/i);
 });
 

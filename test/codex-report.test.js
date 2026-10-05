@@ -248,7 +248,7 @@ test("cached day summaries preserve token deltas across midnight", async (t) => 
   const cached = await runReport(home, args);
   const uncached = await runReport(home, [...args, "--no-cache"]);
   assert.equal(cached, uncached);
-  assert.match(cached, /50 in · 40 cached · 5 out/);
+  assert.match(cached, /50 in ·\s+40 cached ·\s+5 out/);
 });
 
 test("does not count replayed parent history in forked sessions", async (t) => {

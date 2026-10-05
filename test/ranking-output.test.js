@@ -105,3 +105,32 @@ test("reasoning rankings use the requested limit in either format", () => {
     assert.match(otherLine(output), /Other \(2\).*4 turns.*40%/);
   }
 });
+
+
+test("cost columns align across different token magnitudes and terminal widths", () => {
+  const varied = {
+    ...estimate,
+    modelCosts: [
+      { model: "large-model", cost: 6, tokens: usage(2400000000, 2300000000, 4800000) },
+      { model: "small-model", cost: 2, tokens: usage(18000000, 17000000, 39000) },
+      { model: "tiny-model", cost: 1, tokens: usage(94000, 13000, 695) },
+    ],
+    unpricedModels: [],
+  };
+  const outputs = [plainCostSection(varied, 100).join("\n")];
+  for (const width of [72, 84, 106]) {
+    const lines = [];
+    costSection(lines, "Costs", varied, 100, width);
+    const rows = lines.filter((line) => line.includes(" in ·"));
+    assert.ok(rows.every((line) => line.length === width + 4));
+    assert.ok(rows.every((line) => /\d+%\s+│$/.test(line)));
+    outputs.push(lines.join("\n"));
+  }
+  for (const output of outputs) {
+    const rows = output.split("\n").filter((line) => line.includes(" in ·"));
+    assert.equal(rows.length, 3);
+    for (const marker of [" in ·", " cached ·", " out"]) {
+      assert.equal(new Set(rows.map((line) => line.indexOf(marker))).size, 1, marker);
+    }
+  }
+});
