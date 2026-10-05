@@ -1,8 +1,8 @@
 # codex-report
 
-A tiny CLI that shows how much you're actually burning with Codex.
+A tiny CLI that shows how much you're actually burning with Codex and Claude Code.
 
-The CLI reads Codex session JSONL files from `~/.codex/sessions` and reports
+The CLI reads local Codex and Claude Code transcripts and reports
 sessions, messages, tokens, models, projects, repositories, tools, skills,
 daily and monthly activity, and estimated API-equivalent costs. Parsed daily
 session summaries are cached locally to keep repeated reports fast.
@@ -94,7 +94,7 @@ Bypass the local parsed-session cache:
 codex-report --no-cache
 ```
 
-Delete all Codex Report session caches and exit:
+Delete all Codex Report session caches for both agents and exit:
 
 ```bash
 codex-report --clear-cache
@@ -113,7 +113,7 @@ codex-report --global --monthly
 codex-report --global --weekly --activity --top 5
 ```
 
-Available section flags: `--weekly`, `--monthly`, `--projects`, `--repositories`,
+Available section flags: `--agents`, `--weekly`, `--monthly`, `--projects`, `--repositories`,
 `--models`, `--tools`, `--activity`, `--sources`, `--providers`, `--costs`,
 `--insights`, and `--skills`.
 
@@ -131,6 +131,73 @@ The activity and project views answer different questions:
 API cost estimation is experimental and should be treated as an approximation,
 not billing data. For details on how estimates are calculated, see
 [Cost Estimation](docs/cost-estimation.md).
+
+## Claude Code and combined reports
+
+The default remains Codex. Choose Claude Code or both agents explicitly:
+
+```bash
+codex-report --agent claude
+codex-report --agent claude --global --models --tools --costs
+codex-report --agent all --global
+codex-report --agent all --agents
+codex-report --agent all --json
+```
+
+All existing scope, date, section, top-list, and cache options also work with
+Claude Code and combined reports. `--agents` shows per-agent session, message,
+token, and estimated cost totals. Agent identity is separate from the API
+provider (for example, OpenAI, Anthropic, or Vertex) and recorded application source.
+Unknown API providers stay unknown rather than being inferred from a model name.
+Missing agent directories produce a diagnostic on stderr and do not block the
+other selected agent.
+
+Data locations:
+
+| Agent | Transcripts | Override | Report cache |
+| --- | --- | --- | --- |
+| Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v8.json` |
+| Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v1.json` |
+
+Claude Desktop chat, Cowork, and remote history are not included. Reports only
+cover transcript files still present locally; they cannot recover deleted history.
+
+Claude Code counting rules:
+
+- Tool-result user records, injected metadata, compaction summaries, and synthetic
+  API-error replies are excluded from message counts.
+- Split assistant content blocks count as one assistant response/model request.
+  Whole-request usage snapshots replace earlier snapshots rather than being added.
+- Request/message identities remove copied fork history and duplicate parent/subagent
+  usage. Unique tool IDs are counted once, retaining their recorded call timestamps.
+  Without recorded identities, separate transcript rows are treated as separate work.
+- Subagent messages, tokens, models, tools, and skills contribute to their parent
+  session and project. Subagents do not increase the session count. An orphan
+  subagent still contributes under its recorded parent ID.
+- Each response's tokens and assistant message are attributed to its final meaningful
+  usage snapshot; user messages and tool calls use their own timestamps. Timestamp
+  filters run after deduplication, including when cached records are reused.
+- Codex model counts represent recorded turns; Claude counts represent distinct
+  assistant API responses. These are different units of work, not comparable human prompts.
+- Input tokens include uncached input, cache reads, and cache writes for both the
+  totals and estimated costs. Output thinking tokens are already part of output.
+- Skills use actual `Read`/`Bash` reads, explicit `Skill` tool calls, and user skill
+  mentions matched against the selected agents' skill registries. This is best-effort
+  evidence, not a complete execution ledger.
+- Insights use recorded Claude effort and `usage.speed` settings when available.
+  Fast-mode percentages include only responses/turns with known settings. Missing
+  settings display as unavailable, and JSON exposes the eligible counts.
+
+`--json` emits one JSON object on stdout, with diagnostics on stderr. Schema
+version 1 retains the Raycast fields and adds `selectedAgents`, `agents`, `agentDays`,
+`availability`, `sources`, `providers`, `skills`, exact `timestampRange`, insight
+coverage, cost assumptions, and cache-write token fields. Terminal and JSON outputs
+use the same aggregated report. `agentDays` contains messages, tokens, and cost
+coverage per date and agent; these contributions sum to the daily totals.
+`--clear-cache --json` emits `{ "clearedCacheFiles": N }`.
+
+See [Agent adapters](docs/agent-adapters.md) for the implementation boundary and
+how to add another local agent.
 
 ## Example output
 
@@ -249,7 +316,7 @@ $ codex-report --global
   are ignored to avoid false positives.
 - Reports include all Codex sessions in the same local `~/.codex/sessions`
   directory, even if they were created under different Codex logins.
-- Sessions from other OS users, machines, containers, or custom Codex home
-  directories are not included.
+- Sessions from other OS users, machines, or containers are not included.
+  Use `CODEX_HOME` or `CLAUDE_CONFIG_DIR` to select a custom local home.
 - Stats are not split by Codex login because the local session logs do not
   expose a stable account identifier.

@@ -23,7 +23,7 @@ async function runReport(home, args) {
 async function runReportResult(home, args) {
   return execFileAsync(process.execPath, [CLI_PATH, ...args], {
     cwd: REPO_ROOT,
-    env: { ...process.env, HOME: home },
+    env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "" },
   });
 }
 

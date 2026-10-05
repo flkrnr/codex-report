@@ -1,7 +1,7 @@
 # Cost Estimation
 
-`codex-report` estimates what the local Codex token usage would have cost at
-standard OpenAI API list prices. This is an experimental feature. It does not
+`codex-report` estimates what local Codex and Claude Code token usage would
+have cost at standard model API list prices. This is an experimental feature. It does not
 read billing data from OpenAI and it is not an invoice.
 
 ## Data Source
@@ -169,3 +169,60 @@ The estimate answers a narrower question:
 If these local Codex token logs were billed at standard OpenAI API list prices,
 what would the approximate token cost be?
 ```
+
+## Claude Code estimates
+
+Claude Code reads local `~/.claude/projects/**/*.jsonl` transcripts (or
+`CLAUDE_CONFIG_DIR/projects`). Usage is per assistant request, not a cumulative
+session counter. Split response fragments can repeat the same request usage.
+The adapter deduplicates requests and retains their latest meaningful usage
+snapshot before calculating costs. Replayed history and parent/subagent copies
+are reconciled before date filtering.
+
+Claude's `input_tokens` field excludes cache reads and writes. The report
+normalizes inclusive input as:
+
+```text
+input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+```
+
+Reported cached input means cache reads. Cache writes are exposed separately,
+with the recorded one-hour subset. The formula becomes:
+
+```text
+uncached_input * input_price
++ cache_reads * cached_input_price
++ five_minute_or_unknown_writes * cache_write_price
++ one_hour_writes * cache_write_1h_price
++ output * output_price
+```
+
+All terms are divided by 1,000,000. Known cache-write durations come from
+`usage.cache_creation.ephemeral_1h_input_tokens` and
+`ephemeral_5m_input_tokens`. Writes with no duration breakdown use the
+five-minute price and are explicitly identified as an assumption in terminal
+and JSON reports. Thinking tokens are part of output and are not added twice.
+
+The Claude table was verified on 2026-10-05 against the official
+[Anthropic pricing table](https://platform.claude.com/docs/en/about-claude/pricing).
+Prices below are USD per million tokens:
+
+| Model family | Input | Cache read | 5m write | 1h write | Output |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Fable/Mythos 5.1 | 10 | 0.25 | 12.50 | 20 | 50 |
+| Opus 5.5 | 4 | 0.20 | 5 | 8 | 20 |
+| Sonnet 5/5.5 | 2 | 0.20 | 2.50 | 4 | 10 |
+| Fable/Mythos 5 | 10 | 1 | 12.50 | 20 | 50 |
+| Opus 4.5/4.6/4.7/4.8/5 | 5 | 0.50 | 6.25 | 10 | 25 |
+| Opus 4/4.1 | 15 | 1.50 | 18.75 | 30 | 75 |
+| Sonnet 4/4.5/4.6 | 3 | 0.30 | 3.75 | 6 | 15 |
+| Haiku 4.5 | 1 | 0.10 | 1.25 | 2 | 5 |
+| Haiku 3.5 | 0.80 | 0.08 | 1 | 1.60 | 4 |
+
+Known model IDs with dated `-YYYYMMDD` or `@YYYYMMDD` snapshots use the
+corresponding base-model price. Other deployment IDs/unknown models stay
+unpriced. Estimates use the current built-in table for all historical events.
+They exclude speed premiums, geography/long-context modifiers, platform-specific
+rates, web-search/server-tool fees, and subscription billing. These remain
+standard Anthropic API-equivalent estimates even when a different API host is
+recorded; no cloud billing data or credentials are read.

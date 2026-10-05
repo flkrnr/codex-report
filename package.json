@@ -1,7 +1,7 @@
 {
   "name": "codex-report",
   "version": "0.5.4",
-  "description": "a tiny CLI that shows how much you're actually burning with Codex.",
+  "description": "a tiny CLI that shows how much you're actually burning with Codex and Claude Code.",
   "type": "module",
   "homepage": "https://github.com/flkrnr/codex-report#readme",
   "repository": {
@@ -16,10 +16,13 @@
     "codex-cli",
     "usage",
     "report",
-    "stats"
+    "stats",
+    "claude",
+    "claude-code"
   ],
   "files": [
     "bin",
+    "lib",
     "docs/*.md",
     "README.md"
   ],
