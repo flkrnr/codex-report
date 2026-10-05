@@ -1,3 +1,10 @@
-import { copyFileSync, writeFileSync } from "node:fs";
-copyFileSync(new URL("../bin/codex-report.js", import.meta.url), new URL("assets/codex-report.mjs", import.meta.url));
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+const assets = new URL("assets/", import.meta.url);
+mkdirSync(assets, { recursive: true });
+const source = readFileSync(new URL("../bin/codex-report.js", import.meta.url), "utf8");
+writeFileSync(new URL("codex-report.mjs", assets), source.replaceAll('"../lib/', '"./lib/'));
+const library = new URL("lib/", assets);
+rmSync(library, { recursive: true, force: true });
+cpSync(new URL("../lib/", import.meta.url), library, { recursive: true });
+writeFileSync(new URL("package.json", library), JSON.stringify({ type: "module" }));
 writeFileSync(new URL("src/local.json", import.meta.url), JSON.stringify({ node: process.execPath }));
