@@ -258,6 +258,10 @@ test("Claude cache invalidates changed files, handles corruption and clears only
   const cache = path.join(home, ".claude/cache/codex-report-claude-sessions-v1.json");
   await fs.writeFile(cache, "invalid");
   assert.equal((await report(home)).json.messages, 3);
+  const invalidShape = JSON.parse(await fs.readFile(cache, "utf8"));
+  invalidShape.entries[file].parsed.entries = [null];
+  await fs.writeFile(cache, JSON.stringify(invalidShape));
+  assert.equal((await report(home)).json.messages, 3);
   const unrelated = path.join(home, ".claude/cache/unrelated.json");
   await fs.writeFile(unrelated, "{}");
   await put(home, ".codex/cache/codex-report-sessions-v8.json", ["{}"]);
