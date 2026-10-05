@@ -20,7 +20,7 @@
   ],
   "files": [
     "bin",
-    "docs",
+    "docs/*.md",
     "README.md"
   ],
   "bin": {

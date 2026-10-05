@@ -73,7 +73,7 @@ const SECTION_FLAGS = new Map([
 ]);
 
 function usage() {
-  console.error("Usage: codex-report [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--no-cache] [--clear-cache] [--weekly] [--monthly] [--projects] [--repositories] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--insights] [--skills]");
+  console.error("Usage: codex-report [--json] [--global] [--from YYYY-MM-DD|null] [--to YYYY-MM-DD] [--top 10] [--no-cache] [--clear-cache] [--weekly] [--monthly] [--projects] [--repositories] [--models] [--tools] [--activity] [--sources] [--providers] [--costs] [--insights] [--skills]");
 }
 
 function parseArgs(argv) {
@@ -91,6 +91,8 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === "--global") {
       args.global = true;
+    } else if (arg === "--json") {
+      args.json = true;
     } else if (arg === "--top") {
       args.top = Number.parseInt(next, 10);
       index += 1;
@@ -256,19 +258,22 @@ async function repositoryIdentity(session, cwdCache) {
 async function aggregateRepositories(sessions) {
   const identities = new Map();
   const cwdCache = new Map();
+  const repositoryModelTokens = new Map();
   for (const session of sessions) {
     const identity = await repositoryIdentity(session, cwdCache);
     if (!identities.has(identity.key)) {
       identities.set(identity.key, { label: identity.label, count: 0 });
     }
     identities.get(identity.key).count += 1;
+    if (!repositoryModelTokens.has(identity.label)) repositoryModelTokens.set(identity.label, new Map());
+    mergeTokenMaps(repositoryModelTokens.get(identity.label), session.modelTokens);
   }
 
   const repositories = new Map();
   for (const { label: repositoryLabel, count } of identities.values()) {
     increment(repositories, repositoryLabel, count);
   }
-  return repositories;
+  return { repositories, repositoryModelTokens };
 }
 
 function increment(map, key, amount = 1) {
@@ -1287,6 +1292,15 @@ function estimateCosts(modelTokens) {
   };
 }
 
+function costSummary(modelTokens) {
+  const estimate = estimateCosts(modelTokens);
+  return {
+    totalCost: estimate.totalCost,
+    pricedTokens: tokenVolume(estimate.pricedTokens),
+    unpricedTokens: tokenVolume(estimate.unpricedTokens),
+  };
+}
+
 function costLine(entry, totalCost, innerWidth) {
   const costWidth = 10;
   const detailWidth = 34;
@@ -1735,7 +1749,7 @@ async function main() {
   const start = parseDate(args.from);
   const end = parseDate(args.to ?? localDay(new Date()), { endOfDay: !args.to?.includes("T") });
   const wantsSkills = args.sections.includes("skills");
-  const wantsInsights = args.sections.length === 0 || args.sections.includes("insights");
+  const wantsInsights = args.json || args.sections.length === 0 || args.sections.includes("insights");
   const skillRegistry = wantsSkills ? await discoverSkills(scope) : null;
   const files = await sessionFiles(SESSIONS_DIR);
   const cacheSupportsRange = !args.from?.includes("T") && !args.to?.includes("T");
@@ -1769,9 +1783,10 @@ async function main() {
     sessions.push(...allSessions);
   }
 
-  const repositories = await aggregateRepositories(sessions);
+  const { repositories, repositoryModelTokens } = await aggregateRepositories(sessions);
 
   const daySessions = new Map();
+  const dayModelTokens = new Map();
   const activeDays = new Set();
   const tokens = emptyTokens();
   const messages = new Map();
@@ -1792,6 +1807,10 @@ async function main() {
       }
       daySessions.get(day).messages += sessionMessageCount(daily);
       daySessions.get(day).tokens += sessionTokenCount(daily);
+      if (args.json) {
+        if (!dayModelTokens.has(day)) dayModelTokens.set(day, new Map());
+        mergeTokenMaps(dayModelTokens.get(day), daily.modelTokens);
+      }
       if (day !== "(undated)") activeDays.add(day);
     }
 
@@ -1837,6 +1856,28 @@ async function main() {
     skillAnalysis,
   };
 
+  if (args.json) {
+    console.log(JSON.stringify({
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      period: { from: start ? localDay(start) : null, to: localDay(end) },
+      scope,
+      sessions: sessions.length,
+      messages: (messages.get("user") ?? 0) + (messages.get("assistant") ?? 0),
+      tokens,
+      days: [...daySessions].map(([date, activity]) => ({ date, ...activity, cost: costSummary(dayModelTokens.get(date)) })),
+      models: [...modelTokens].map(([name, usage]) => ({ name, tokens: tokenVolume(usage), turns: models.get(name) ?? 0, cost: costSummary(new Map([[name, usage]])) }))
+        .sort((a, b) => b.tokens - a.tokens),
+      reasoningEfforts: sortedEntries(reasoningEfforts).map(([name, turns]) => ({ name, turns })),
+      serviceTiers: sortedEntries(serviceTiers).map(([name, turns]) => ({ name, turns })),
+      insights: activityInsights(serviceTiers),
+      projects: sortedEntries(projects).map(([name, count]) => ({ name, sessions: count })),
+      repositories: sortedEntries(repositories).map(([name, count]) => ({ name, sessions: count, cost: costSummary(repositoryModelTokens.get(name)) })),
+      tools: sortedEntries(tools).map(([name, count]) => ({ name, count })),
+      costEstimate,
+    }));
+    return;
+  }
   console.log(args.sections.length > 0 ? renderPlainSections(report) : renderReport(report));
 }
 

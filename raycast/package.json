@@ -1,0 +1,32 @@
+{
+  "name": "codex-report-local",
+  "title": "Codex Report",
+  "description": "Local Codex usage with native charts",
+  "icon": "icon.png",
+  "author": "flkrnr",
+  "license": "MIT",
+  "platforms": [
+    "macOS"
+  ],
+  "commands": [
+    {
+      "name": "report",
+      "title": "Show Codex Report",
+      "description": "View local Codex activity and token usage",
+      "mode": "view"
+    }
+  ],
+  "scripts": {
+    "dev": "node prepare.mjs && ray develop",
+    "build": "node prepare.mjs && ray build -e dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@raycast/api": "^1.104.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "typescript": "^5.8.2"
+  }
+}
