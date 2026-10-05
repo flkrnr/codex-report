@@ -79,7 +79,7 @@ test("normalizes Claude tokens, cache write durations, reasoning and pricing", a
   assert.deepEqual(json.providers, [{ name: "anthropic", sessions: 1 }]);
   const { stdout } = await run(home, ["--agent", "claude", "--costs", ...WINDOW]);
   assert.match(stdout, /330 in · 200 cached · 10 out/);
-  assert.match(stdout, /cache writes: 30 \(20 at 1h\)/);
+  assert.doesNotMatch(stdout, /cache writes/i);
 });
 
 test("deduplicates split blocks and usage snapshots while retaining every unique tool", async (t) => {

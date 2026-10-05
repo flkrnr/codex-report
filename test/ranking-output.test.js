@@ -55,7 +55,7 @@ const estimate = {
   pricedTokens: emptyTokens(),
   modelCosts: [
     { model: "first", cost: 6, tokens: usage(100, 10, 20) },
-    { model: "second", cost: 2, tokens: usage(20, 2, 4) },
+    { model: "second", cost: 2, tokens: { ...usage(20, 2, 4), cache_creation_input_tokens: 5, cache_creation_1h_input_tokens: 5 } },
     { model: "third", cost: 1, tokens: usage(30, 3, 6) },
   ],
   unpricedModels: [
@@ -73,6 +73,7 @@ test("cost remainder preserves money and token detail, keeping unknown usage sep
     assert.match(otherLine(output), /Other \(2\).*\$3\.00.*50 in.*5 cached.*10 out/);
     assert.match(output, /Other \(2\)(?:: | \()50 tokens/);
     assert.doesNotMatch(output, /unknown-second|unknown-third/);
+    assert.doesNotMatch(output, /cache writes/i);
   }
   const expanded = boxed(costSection, "Cost", estimate, 100);
   assert.match(expanded, /unknown-third/);
