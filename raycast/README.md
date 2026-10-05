@@ -20,6 +20,8 @@ publication is required.
 - ⌘2: This Week, starting on Monday
 - ⌘3: This Month
 - ⌘← / ⌘→: Previous / next day, week, or month
+- Click the Agents tags: All Agents, Codex (blue), or Claude (orange)
+- ⌘4: All Agents · ⌘5: Codex · ⌘6: Claude
 - ⌘R: Refresh
 - ⌘K: Open Actions, including switching between messages, tokens, and estimated costs or copying JSON
 - ⌘⇧C: Copy a readable summary
@@ -29,7 +31,11 @@ period; the current period ends today.
 
 All periods use the local time zone. The default is the current week. Activity
 charts show aligned weekday and date columns, with weekly groups in the monthly
-view. Bars share one scale across the selected period. Charts are SVG images
+view. The default is All Agents; the CLI still defaults to Codex. In All Agents, each activity bar is stacked
+with Codex in blue and Claude in orange; the legend also labels the colors.
+The selected agent filters the totals, detail lists, copied summary/JSON and PNG
+export. Switching back to a loaded agent/period reuses its report in memory;
+Refresh invalidates all loaded views. Bars share one scale across the selected period. Charts are SVG images
 without hover interaction.
 
 ## Explore
@@ -57,7 +63,7 @@ is calculated relative to input tokens.
 local Node executable path. Restart `npm run dev` after changing Node versions
 or modifying the CLI.
 
-The extension reuses the CLI parser and cache in `~/.codex/cache`; it does not
+The extension reuses the CLI parser and cache in `~/.codex/cache` and `~/.claude/cache`; it does not
 run a separate server. A cold scan can take longer, just as it does in the CLI.
 During refresh, the previous report stays visible. If refresh fails, that report
 is explicitly marked as the last successful result.
