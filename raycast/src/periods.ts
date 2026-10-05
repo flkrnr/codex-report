@@ -1,7 +1,7 @@
 export type Period = "today" | "week" | "month";
 export const periods: Record<Period, string> = { today: "Today", week: "This Week", month: "This Month" };
 
-function day(date: Date): string {
+export function calendarDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
@@ -16,13 +16,13 @@ export function periodRange(period: Period, offset: number, now = new Date()) {
   const end = new Date(start);
   if (period === "week") end.setDate(end.getDate() + 6);
   if (period === "month") end.setMonth(end.getMonth() + 1, 0);
-  const from = day(start);
-  const to = offset === 0 ? day(now) : day(end);
+  const from = calendarDate(start);
+  const to = offset === 0 ? calendarDate(now) : calendarDate(end);
   const title = periodTitle(period, offset, start);
   const dates: string[] = [];
   const cursor = new Date(start);
-  while (day(cursor) <= to) {
-    dates.push(day(cursor));
+  while (calendarDate(cursor) <= to) {
+    dates.push(calendarDate(cursor));
     cursor.setDate(cursor.getDate() + 1);
   }
   return { from, to, dates, title };

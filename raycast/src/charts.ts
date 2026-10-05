@@ -1,11 +1,12 @@
 import { environment } from "@raycast/api";
 import type { SvgImage } from "./png";
+import { escapeXml, imageMarkdown } from "./svg";
+export { escapeXml } from "./svg";
 
 export type BarSegment = { label: string; value: number; color: string };
 export type Bar = { label: string; value: number; group?: string; weekday?: string; segments?: BarSegment[]; displayValue?: string };
 export type ChartLegend = { label: string; color: string }[];
 export const compact = (value: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
-export const escapeXml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 export function barChartImage(title: string, bars: Bar[], legend: ChartLegend = []): SvgImage {
   const dark = environment.appearance === "dark";
@@ -40,8 +41,7 @@ export function barChartImage(title: string, bars: Bar[], legend: ChartLegend = 
 
 export function barChart(title: string, bars: Bar[], legend: ChartLegend = []): string {
   const image = barChartImage(title, bars, legend);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${image.width}" height="${image.height}" viewBox="0 0 ${image.width} ${image.height}">${image.body}</svg>`;
-  return `![${title}](data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}?raycast-width=560)`;
+  return imageMarkdown(title, image);
 }
 
 function barFill(bar: Bar, index: number, y: number, max: number, accent: string, barWidth: number): string {
