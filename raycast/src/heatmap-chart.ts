@@ -42,7 +42,8 @@ export function heatmapImage(map: Heatmap, dark: boolean, formatValue: (value: n
   const gap = map.weeks > 32 ? 2.5 : 4;
   const size = Math.min(17, (522 - gap * (map.weeks - 1)) / map.weeks);
   const bottom = TOP + 7 * (size + gap);
-  const days = WEEKDAYS.map((label, index) => `<text x="0" y="${TOP + index * (size + gap) + size * 0.8}" fill="${muted}" font-size="10">${label}</text>`).join("");
+  const weekdaySize = Math.min(8, size * 0.85);
+  const days = WEEKDAYS.map((label, index) => `<text x="${LEFT - 10}" y="${TOP + index * (size + gap) + size / 2}" text-anchor="end" dominant-baseline="central" fill="${muted}" opacity="0.8" font-size="${weekdaySize}">${label}</text>`).join("");
   const agents = map.agent === "all" ? ["codex", "claude"] as const : [map.agent];
   const legendItems = agents.map((agent) => ({ label: agentLabels[agent], color: agentColors[agent] }));
   if (map.cells.some((cell) => cell.inRange && cell.dominantAgent === "tie")) legendItems.push({ label: "Equal share", color: TIE_COLOR });
