@@ -25,8 +25,8 @@ export default function HeatmapCommand() {
   const total = map?.cells.filter((cell) => cell.inRange).reduce((sum, cell) => sum + cell.value, 0) ?? 0;
   const unpriced = map?.cells.some((cell) => cell.inRange && cell.cost.unpricedTokens > 0);
   const costNote = metric === "costs" ? `API-equivalent estimates; unpriced usage is excluded.${unpriced ? " This is a partial estimate." : ""} See ${view === "daily" ? "Daily" : "Weekly"} Activity for coverage.` : "";
-  const note = "Grey = zero usage. Color shows the dominant agent for the selected metric; purple indicates equal shares. The scale stays fixed across agent filters.";
-  const viewNote = view === "daily" ? "Intensity shows the daily total." : "Weekly totals fill 1–7 blocks; the strongest combined week sets the height scale. Boundary weeks include only dates in this window.";
+  const note = view === "weekly" ? "Grey = zero usage. Blocks approximate usage shares, rounded to whole blocks: Codex below, Claude above. Small shares may round to zero; see Weekly Activity for exact values. The scale stays fixed across agent filters." : "Grey = zero usage. Color shows the dominant agent for the selected metric; purple indicates equal shares. The scale stays fixed across agent filters.";
+  const viewNote = view === "daily" ? "Intensity shows the daily total." : "Weekly totals fill 1–7 blocks on a square-root scale; the strongest combined week sets the height scale. Boundary weeks include only dates in this window.";
   const markdown = [
     `## ${range.title} · ${agentLabels[agent]}
 ${range.from} — ${range.to}`,

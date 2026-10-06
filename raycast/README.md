@@ -77,9 +77,12 @@ agents (⌘4 / ⌘5 / ⌘6), so their usage remains comparable.
 
 Weekly stacks up to seven blocks per column using the selected metric’s weekly
 sum. The strongest combined week fills seven blocks; other nonzero weeks round
-up proportionally. This peak stays fixed across agent filters. Boundary weeks
+up on a square-root scale, making smaller weeks easier to distinguish. This peak stays fixed across agent filters. Boundary weeks
 include only dates in the selected window, and empty future weeks stay visible.
-The column color follows the dominant agent’s weekly sum. **Show Weekly Activity**
+Whole blocks approximate each agent’s share of the selected metric, with Codex
+below and Claude above. Shares round to the nearest block, so small shares can
+disappear and exact ties allocate the extra block to Codex. Axis labels show
+usage thresholds rather than percentages. **Show Weekly Activity**
 opens exact weekly totals and per-agent contributions.
 
 Each day uses the color of the agent with the largest value for the selected

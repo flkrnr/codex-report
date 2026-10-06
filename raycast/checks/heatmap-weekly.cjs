@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { buildHeatmap, heatmapRange } = require("../.test-build/heatmap-data.js");
-const { buildWeeklyHeatmap, weeklyHeight } = require("../.test-build/heatmap-weekly.js");
+const { buildWeeklyHeatmap, weeklyHeight, weeklyBlocks } = require("../.test-build/heatmap-weekly.js");
 const { heatmapImage } = require("../.test-build/heatmap-chart.js");
 const entry = (date, agent, tokens, messages, dollars = tokens / 100) => ({
   date, agent, tokens, messages, cost: { totalCost: dollars, pricedTokens: tokens, unpricedTokens: 0 },
@@ -19,33 +19,32 @@ const report = { agentDays: entries, days: entries }; // One contribution per da
 const weekly = (agent = "all", metric = "tokens", data = report, window = range) =>
   buildWeeklyHeatmap(buildHeatmap(data, window, agent, metric));
 
-test("weekly sums clip boundaries and choose the winner by volume, not winning days", () => {
+test("weekly sums clip boundaries and aggregate each agent across days", () => {
   const result = weekly();
   assert.equal(result.peak, 100);
-  assert.deepEqual(result.weeks.map(w => [w.date, w.endDate, w.value, w.dominantAgent]), [
-    ["2026-03-03", "2026-03-08", 100, "claude"], ["2026-03-09", "2026-03-10", 30, "claude"],
+  assert.deepEqual(result.weeks.map(w => [w.date, w.endDate, w.value]), [
+    ["2026-03-03", "2026-03-08", 100], ["2026-03-09", "2026-03-10", 30],
   ]);
   assert.deepEqual(result.weeks[0].contributions.map(e => [e.agent, e.tokens, e.messages]), [["codex", 40, 20], ["claude", 60, 1]]);
   assert.equal(result.weeks.reduce((sum, w) => sum + w.value, 0), 130);
 });
 
 test("weekly metrics and agent filters retain the combined peak", () => {
-  for (const [metric, value, winner] of [["tokens", 100, "claude"], ["messages", 21, "codex"], ["costs", 9, "codex"]]) {
+  for (const [metric, value] of [["tokens", 100], ["messages", 21], ["costs", 9]]) {
     const all = weekly("all", metric);
     assert.equal(all.weeks[0].value, value);
-    assert.equal(all.weeks[0].dominantAgent, winner);
     assert.equal(weekly("codex", metric).peak, all.peak);
     assert.equal(weekly("claude", metric).peak, all.peak);
   }
   const codex = weekly("codex");
   assert.equal(codex.weeks[0].value, 40);
   assert.equal(codex.weeks[0].cost.totalCost, 8);
-  assert.equal(codex.weeks[1].dominantAgent, undefined);
-  assert.equal(weeklyHeight(codex.weeks[0].value, codex.peak), 3);
+  assert.deepEqual(weeklyBlocks(codex.weeks[1], codex.peak, "codex", "tokens"), []);
+  assert.equal(weeklyHeight(codex.weeks[0].value, codex.peak), 5);
 });
 
 test("weekly blocks round up positive usage and preserve empty future weeks", () => {
-  assert.deepEqual([0, 1, 14, 15, 50, 100].map(v => weeklyHeight(v, 100)), [0, 1, 1, 2, 4, 7]);
+  assert.deepEqual([0, 1, 14, 15, 50, 100].map(v => weeklyHeight(v, 100)), [0, 1, 3, 3, 5, 7]);
   assert.equal(weeklyHeight(0, 0), 0);
   const year = heatmapRange("year", 0, new Date(2026, 9, 6, 12));
   const result = weekly("all", "tokens", report, year);
@@ -62,17 +61,42 @@ test("weekly cost coverage and equal shares remain available", () => {
   assert.equal(weekly("all", "costs", data).weeks[0].cost.unpricedTokens, 900);
   assert.equal(weekly("codex", "costs", data).weeks[0].cost.unpricedTokens, 0);
   const tied = [entry("2026-03-03", "codex", 50, 1), entry("2026-03-04", "claude", 50, 1)];
-  assert.equal(weekly("all", "tokens", { days: tied, agentDays: tied }).weeks[0].dominantAgent, "tie");
+  const result = weekly("all", "tokens", { days: tied, agentDays: tied });
+  assert.deepEqual(weeklyBlocks(result.weeks[0], result.peak, "all", "tokens"), ["codex", "codex", "codex", "codex", "claude", "claude", "claude"]);
 });
 
 test("weekly SVG stacks solid blocks from the bottom and labels its volume scale", () => {
   const image = heatmapImage(buildHeatmap(report, range, "all", "tokens"), true, String, "weekly");
   assert.ok(image.body.includes("Activity · Tokens · Weekly"));
-  assert.ok(image.body.includes("100 per week = 7 blocks"));
+  assert.ok(image.body.includes("Square-root scale"));
   assert.ok(!image.body.includes(">Mon</text>"));
-  assert.equal((image.body.match(/<g opacity="1">/g) || []).length, 10);
-  assert.ok(image.body.includes("2026-03-09 — 2026-03-10: 30 tokens · Claude"));
-  assert.ok(image.body.includes('y="138" width="17" height="17" rx="4" fill="#D97757"'));
+  assert.equal((image.body.match(/<g opacity="1">/g) || []).length, 11);
+  assert.ok(image.body.includes("2026-03-09 — 2026-03-10: 30 tokens · Claude: 30"));
+  assert.ok(image.body.includes('y="117" width="17" height="17" rx="4" fill="#D97757"'));
   const empty = buildHeatmap({ days: [], agentDays: [] }, range, "all", "costs");
   assert.ok(heatmapImage(empty, true, String, "weekly").body.includes("No priced costs"));
+});
+
+
+test("weekly shares form contiguous Codex then Claude segments using the selected metric", () => {
+  for (const [metric, codexCount] of [["tokens", 3], ["messages", 7], ["costs", 6]]) {
+    const result = weekly("all", metric);
+    const blocks = weeklyBlocks(result.weeks[0], result.peak, "all", metric);
+    assert.deepEqual(blocks, [...Array(codexCount).fill("codex"), ...Array(7 - codexCount).fill("claude")]);
+    for (const agent of ["codex", "claude"]) {
+      const filtered = weekly(agent, metric);
+      const selected = weeklyBlocks(filtered.weeks[0], filtered.peak, agent, metric);
+      assert.ok(selected.every(value => value === agent));
+      assert.equal(selected.length, weeklyHeight(filtered.weeks[0].value, result.peak));
+    }
+  }
+  const small = [entry("2026-03-03", "codex", 99, 1), entry("2026-03-04", "claude", 1, 1)];
+  const result = weekly("all", "tokens", { days: small, agentDays: small });
+  assert.deepEqual(weeklyBlocks(result.weeks[0], result.peak, "all", "tokens"), Array(7).fill("codex"));
+  const svg = heatmapImage(buildHeatmap(report, range, "all", "tokens"), true, String, "weekly").body;
+  assert.ok(svg.includes('y="138" width="17" height="17" rx="4" fill="#228cf6"'));
+  assert.ok(svg.includes('y="117" width="17" height="17" rx="4" fill="#D97757"'));
+  assert.ok(svg.includes("≤ 100</text>"));
+  assert.ok(!svg.includes("100%"));
+  assert.ok(!svg.includes("Equal share"));
 });

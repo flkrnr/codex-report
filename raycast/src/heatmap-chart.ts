@@ -1,8 +1,8 @@
 import type { SvgImage } from "./png";
 import { agentColors, agentLabels, metrics } from "./report-data";
 import { escapeXml } from "./svg";
-import { Heatmap, HeatmapCell, HeatmapView, heatmapLevel } from "./heatmap-data";
-import { WeeklyHeatmap, buildWeeklyHeatmap, weeklyHeight } from "./heatmap-weekly";
+import { Heatmap, HeatmapCell, HeatmapView, heatmapLevel, metricValue } from "./heatmap-data";
+import { WeeklyHeatmap, buildWeeklyHeatmap, weeklyBlocks } from "./heatmap-weekly";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SOURCE_COLORS = { ...agentColors, tie: "#A78BFA" };
@@ -28,19 +28,22 @@ function cellSvg(cell: HeatmapCell, map: Heatmap, size: number, gap: number, tra
   return tileSvg(cell.week, cell.weekday, size, gap, track, color, OPACITY[level], title);
 }
 
-function weeklyTiles(weekly: WeeklyHeatmap, metricLabel: string, size: number, gap: number, track: string): string {
+function weeklyTiles(weekly: WeeklyHeatmap, map: Heatmap, size: number, gap: number, track: string): string {
   return weekly.weeks.map((week) => {
-    const height = weeklyHeight(week.value, weekly.peak);
-    const color = week.dominantAgent ? SOURCE_COLORS[week.dominantAgent] : undefined;
-    const title = `${week.date} — ${week.endDate}: ${week.value} ${metricLabel} · ${week.dominantAgent ? SOURCE_LABELS[week.dominantAgent] : "No usage"}`;
-    return Array.from({ length: 7 }, (_, row) => tileSvg(week.week, row, size, gap, track, row >= 7 - height ? color : undefined, 1, title)).join("");
+    const blocks = weeklyBlocks(week, weekly.peak, map.agent, map.metric);
+    const shares = week.contributions.map((entry) => `${agentLabels[entry.agent]}: ${metricValue(entry, map.metric)}`);
+    const title = `${week.date} — ${week.endDate}: ${week.value} ${metrics[map.metric].toLowerCase()} · ${shares.join(" · ")}`;
+    return Array.from({ length: 7 }, (_, row) => {
+      const agent = blocks[6 - row];
+      return tileSvg(week.week, row, size, gap, track, agent ? agentColors[agent] : undefined, 1, title);
+    }).join("");
   }).join("");
 }
 
-function axisLabels(view: HeatmapView, size: number, gap: number, muted: string): string {
-  const labels = view === "daily" ? WEEKDAYS : ["100%", "", "", "57%", "", "", "14%"];
+function axisLabels(weekly: WeeklyHeatmap | undefined, size: number, gap: number, muted: string, formatValue: (value: number) => string): string {
+  const labels = weekly ? [7, 0, 0, 4, 0, 0, 1].map((blocks) => blocks && weekly.peak > 0 ? `≤ ${formatValue(weekly.peak * (blocks / 7) ** 2)}` : "") : WEEKDAYS;
   const fontSize = Math.min(8, size * 0.85);
-  return labels.map((label, index) => `<text x="${LEFT - 10}" y="${TOP + index * (size + gap) + size / 2}" text-anchor="end" dominant-baseline="central" fill="${muted}" opacity="0.8" font-size="${fontSize}">${label}</text>`).join("");
+  return labels.map((label, index) => `<text x="${LEFT - 10}" y="${TOP + index * (size + gap) + size / 2}" text-anchor="end" dominant-baseline="central" fill="${muted}" opacity="0.8" font-size="${fontSize}">${escapeXml(label)}</text>`).join("");
 }
 
 function dailyScale(map: Heatmap, bottom: number, track: string, text: string, muted: string, formatValue: (value: number) => string): string {
@@ -70,16 +73,16 @@ export function heatmapImage(map: Heatmap, dark: boolean, formatValue: (value: n
   const size = Math.min(17, (522 - gap * (map.weeks - 1)) / map.weeks);
   const bottom = TOP + 7 * (size + gap);
   const weekly = view === "weekly" ? buildWeeklyHeatmap(map) : undefined;
-  const days = axisLabels(view, size, gap, muted);
+  const days = axisLabels(weekly, size, gap, muted, formatValue);
   const agents = map.agent === "all" ? ["codex", "claude"] as const : [map.agent];
   const legendItems = agents.map((agent) => ({ label: agentLabels[agent], color: agentColors[agent] }));
-  if ((weekly?.weeks ?? map.cells.filter((cell) => cell.inRange)).some((entry) => entry.dominantAgent === "tie")) legendItems.push({ label: SOURCE_LABELS.tie, color: SOURCE_COLORS.tie });
+  if (!weekly && map.cells.filter((cell) => cell.inRange).some((entry) => entry.dominantAgent === "tie")) legendItems.push({ label: SOURCE_LABELS.tie, color: SOURCE_COLORS.tie });
   const legend = legendItems.map((item, index) => `<circle cx="${LEFT + index * 95}" cy="${bottom + 15}" r="4" fill="${item.color}"/><text x="${LEFT + index * 95 + 10}" y="${bottom + 19}" fill="${muted}" font-size="11">${item.label}</text>`).join("");
   const peak = weekly?.peak ?? map.thresholds[3];
   let scale = dailyScale(map, bottom, track, text, muted, formatValue);
-  if (weekly) scale = `<text x="${LEFT}" y="${bottom + 41}" fill="${muted}" font-size="10">1–7 blocks · ${escapeXml(formatValue(weekly.peak))} per week = 7 blocks</text>`;
+  if (weekly) scale = `<text x="${LEFT}" y="${bottom + 41}" fill="${muted}" font-size="10">Square-root scale · blocks approximate agent shares</text>`;
   if (peak === 0) scale = `<text x="${LEFT}" y="${bottom + 41}" fill="${muted}" font-size="10">${map.metric === "costs" ? "No priced costs" : "No usage for this metric"}</text>`;
-  const cells = weekly ? weeklyTiles(weekly, metrics[map.metric].toLowerCase(), size, gap, track) : map.cells.map((cell) => cellSvg(cell, map, size, gap, track)).join("");
+  const cells = weekly ? weeklyTiles(weekly, map, size, gap, track) : map.cells.map((cell) => cellSvg(cell, map, size, gap, track)).join("");
   const title = `Activity · ${metrics[map.metric]} · ${view === "daily" ? "Daily" : "Weekly"}`;
   return { width: 560, height: Math.ceil(bottom + 57), body: `<g font-family="-apple-system,Helvetica,sans-serif"><text x="0" y="17" fill="${text}" font-size="14" font-weight="600">${title}</text>${monthLabels(map, size, gap, muted)}${days}${cells}${legend}${scale}</g>` };
 }
