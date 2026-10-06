@@ -5,6 +5,7 @@ import { ExportPngAction } from "./export-png";
 import { Breakdown } from "./breakdown";
 import { AgentSelection, Report, Metric, metrics, agentColors, agentLabels, money, estimatedCostTitle, cachedInputShare, fastModeShare } from "./report-data";
 import { Period, periods } from "./periods";
+import HeatmapCommand from "./heatmap";
 
 type Props = {
   report?: Report; title: string; period: Period; agent: AgentSelection; metric: Metric;
@@ -38,6 +39,7 @@ export function ReportActions({ report, title, period, agent, metric, dates, err
 
 function ExploreActions({ report, title }: { report: Report; title: string }) {
   return <ActionPanel.Section title="Explore">
+        <Action.Push title="Show Activity Heatmap" icon={Icon.Calendar} target={<HeatmapCommand />} />
         <Action.Push title="Show Models" icon={Icon.Layers} shortcut={{ modifiers: ["cmd"], key: "m" }} target={<Breakdown kind="models" report={report} period={title} />} />
         <Action.Push title="Show Costs" icon={Icon.Coins} shortcut={{ modifiers: ["cmd"], key: "e" }} target={<Breakdown kind="costs" report={report} period={title} />} />
         <Action.Push title="Show Reasoning Efforts" icon={Icon.LightBulb} shortcut={{ modifiers: ["cmd"], key: "i" }} target={<Breakdown kind="efforts" report={report} period={title} />} />

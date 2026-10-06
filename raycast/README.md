@@ -57,6 +57,42 @@ settings. Costs use the existing CLI API-equivalent estimates, including its
 Reserve alias; they do not represent subscription fees. The cached-input share
 is calculated relative to input tokens.
 
+## Activity heatmap
+
+Open **Show Activity Heatmap** directly or use the dashboard's Actions menu.
+It defaults to tokens, both agents, and six calendar months ending today.
+- ⌘1: Six months ending today
+- ⌘2: Current calendar year, January through December
+- ⌘3: Switch Daily / Weekly
+- ⌘← / ⌘→: Previous / next six-month window or calendar year
+
+Every year includes January through December, with empty cells for dates without usage. ⌘1 and ⌘2 return to the current
+period. Actions also switch between tokens, messages, and estimated API costs.
+
+Columns are weeks, Monday through Sunday. Month and weekday labels identify
+both axes. Grey means zero usage for the selected metric; dates outside the
+window are omitted. Four intensity levels use the combined daily peak divided
+by 64, 16, and 4, then the peak itself. These thresholds stay fixed when switching
+agents (⌘4 / ⌘5 / ⌘6), so their usage remains comparable.
+
+Weekly stacks up to seven blocks per column using the selected metric’s weekly
+sum. The strongest combined week fills seven blocks; other nonzero weeks round
+up on a square-root scale, making smaller weeks easier to distinguish. This peak stays fixed across agent filters. Boundary weeks
+include only dates in the selected window, and empty future weeks stay visible.
+Whole blocks approximate each agent’s share of the selected metric, with Codex
+below and Claude above. Shares round to the nearest block, so small shares can
+disappear and exact ties allocate the extra block to Codex. Axis labels show
+usage thresholds rather than percentages. **Show Weekly Activity**
+opens exact weekly totals and per-agent contributions.
+
+Each day uses the color of the agent with the largest value for the selected
+metric. Exact ties use purple, labeled **Equal share** in the legend when present.
+Intensity shows the combined daily total, so the color indicates the winner
+rather than its share; both contributions remain available in the details. **Show Daily Activity** opens a searchable native list
+with exact totals and each agent's recorded usage. Cost views flag partial
+estimates and exclude unpriced usage. Export as PNG includes the selected view
+and its legend.
+
 ## Local development
 
 `prepare.mjs` copies the existing CLI into the extension assets and records the
@@ -65,6 +101,10 @@ or modifying the CLI.
 
 The extension reuses the CLI parser and cache in `~/.codex/cache` and `~/.claude/cache`; it does not
 run a separate server. A cold scan can take longer, just as it does in the CLI.
+A bounded Raycast cache keeps successful reports across command openings.
+Previously loaded periods display immediately while a fresh report loads in the
+background; the heatmap marks this state. A new period still needs an initial
+scan. Refresh clears saved reports for every window and agent.
 During refresh, the previous report stays visible. If refresh fails, that report
 is explicitly marked as the last successful result.
 
@@ -73,6 +113,7 @@ Validate the extension with:
 ```sh
 npm run build
 npm run typecheck
+npm test
 ```
 
 Category costs reuse cached model-token totals without changing the cache format.
