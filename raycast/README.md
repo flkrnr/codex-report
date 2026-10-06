@@ -63,6 +63,7 @@ Open **Show Activity Heatmap** directly or use the dashboard's Actions menu.
 It defaults to tokens, both agents, and six calendar months ending today.
 - ⌘1: Six months ending today
 - ⌘2: Current calendar year, January through December
+- ⌘3: Switch Daily / Weekly
 - ⌘← / ⌘→: Previous / next six-month window or calendar year
 
 Every year includes January through December, with empty cells for dates without usage. ⌘1 and ⌘2 return to the current
@@ -73,6 +74,13 @@ both axes. Grey means zero usage for the selected metric; dates outside the
 window are omitted. Four intensity levels use the combined daily peak divided
 by 64, 16, and 4, then the peak itself. These thresholds stay fixed when switching
 agents (⌘4 / ⌘5 / ⌘6), so their usage remains comparable.
+
+Weekly stacks up to seven blocks per column using the selected metric’s weekly
+sum. The strongest combined week fills seven blocks; other nonzero weeks round
+up proportionally. This peak stays fixed across agent filters. Boundary weeks
+include only dates in the selected window, and empty future weeks stay visible.
+The column color follows the dominant agent’s weekly sum. **Show Weekly Activity**
+opens exact weekly totals and per-agent contributions.
 
 Each day uses the color of the agent with the largest value for the selected
 metric. Exact ties use purple, labeled **Equal share** in the legend when present.

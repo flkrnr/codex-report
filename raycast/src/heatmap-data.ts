@@ -1,6 +1,7 @@
 import { calendarDate } from "./periods";
 import { Agent, AgentSelection, CostSummary, Metric, Report } from "./report-data";
 
+export type HeatmapView = "daily" | "weekly";
 export type HeatmapPeriod = "sixMonths" | "year";
 export type HeatmapRange = { from: string; to: string; title: string };
 export type HeatmapCell = {
@@ -24,16 +25,24 @@ export function heatmapRange(period: HeatmapPeriod, offset: number, now = new Da
   return { from: calendarDate(start), to: calendarDate(end), title: "6 Months of Activity" };
 }
 
-function metricValue(activity: Report["days"][number] | undefined, metric: Metric): number {
+export function metricValue(activity: Report["days"][number] | undefined, metric: Metric): number {
   if (!activity) return 0;
   return metric === "costs" ? activity.cost.totalCost : activity[metric];
 }
 
-function dominantAgent(entries: Report["agentDays"], metric: Metric): HeatmapCell["dominantAgent"] {
+export function dominantAgent(entries: Report["agentDays"], metric: Metric): HeatmapCell["dominantAgent"] {
   const peak = Math.max(0, ...entries.map((entry) => metricValue(entry, metric)));
   if (peak === 0) return undefined;
   const winners = entries.filter((entry) => metricValue(entry, metric) === peak);
   return winners.length > 1 ? "tie" : winners[0].agent;
+}
+
+export function sumCosts(entries: { cost: CostSummary }[]): CostSummary {
+  return entries.reduce((sum, entry) => ({
+    totalCost: sum.totalCost + entry.cost.totalCost,
+    pricedTokens: sum.pricedTokens + entry.cost.pricedTokens,
+    unpricedTokens: sum.unpricedTokens + entry.cost.unpricedTokens,
+  }), { totalCost: 0, pricedTokens: 0, unpricedTokens: 0 });
 }
 
 export function heatmapLevel(value: number, thresholds: number[]): number {
@@ -67,11 +76,7 @@ export function buildHeatmap(report: Report, range: HeatmapRange, agent: AgentSe
       date, week: Math.floor(cells.length / 7), weekday: cells.length % 7,
       inRange: date >= range.from && date <= range.to,
       value: agent === "all" ? metricValue(totals.get(date), metric) : visible.reduce((sum, entry) => sum + metricValue(entry, metric), 0),
-      cost: visible.reduce((sum, entry) => ({
-        totalCost: sum.totalCost + entry.cost.totalCost,
-        pricedTokens: sum.pricedTokens + entry.cost.pricedTokens,
-        unpricedTokens: sum.unpricedTokens + entry.cost.unpricedTokens,
-      }), { totalCost: 0, pricedTokens: 0, unpricedTokens: 0 }),
+      cost: sumCosts(visible),
       dominantAgent: dominantAgent(visible, metric), contributions: daily,
     });
     cursor.setDate(cursor.getDate() + 1);
