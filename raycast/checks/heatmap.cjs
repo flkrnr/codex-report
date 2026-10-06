@@ -103,9 +103,22 @@ test("ties have a separate color, filters select their own agent, and small majo
 
 test("window navigation handles current partial months and past year boundaries", () => {
   const now = new Date(2026, 9, 5, 12);
-  assert.deepEqual(heatmapRange(6, 0, now), { from: "2026-05-01", to: "2026-10-05", title: "6 Months of Activity" });
-  assert.deepEqual(heatmapRange(6, -1, now), { from: "2025-11-01", to: "2026-04-30", title: "6 Months of Activity" });
-  assert.equal(heatmapRange(12, 0, now).from, "2025-11-01");
+  assert.deepEqual(heatmapRange("sixMonths", 0, now), { from: "2026-05-01", to: "2026-10-05", title: "6 Months of Activity" });
+  assert.deepEqual(heatmapRange("sixMonths", -1, now), { from: "2025-11-01", to: "2026-04-30", title: "6 Months of Activity" });
+  assert.deepEqual(heatmapRange("year", 0, now), { from: "2026-01-01", to: "2026-12-31", title: "2026 Activity" });
+  assert.deepEqual(heatmapRange("year", -1, now), { from: "2025-01-01", to: "2025-12-31", title: "2025 Activity" });
+  const january = new Date(2027, 0, 2, 12);
+  assert.deepEqual(heatmapRange("year", 0, january), { from: "2027-01-01", to: "2027-12-31", title: "2027 Activity" });
+  const currentYear = buildHeatmap({ days: [], agentDays: [] }, heatmapRange("year", 0, now), "all", "tokens");
+  assert.equal(currentYear.cells.filter((cell) => cell.inRange).length, 365);
+  assert.ok(currentYear.cells.some((cell) => cell.inRange && cell.date === "2026-12-31" && cell.value === 0));
+  const svg = heatmapImage(currentYear, true, String).body;
+  assert.ok(svg.includes(">Nov</text>"));
+  assert.ok(svg.includes(">Dec</text>"));
+  const leapYear = heatmapRange("year", -2, now);
+  const days = buildHeatmap({ days: [], agentDays: [] }, leapYear, "all", "tokens").cells.filter((cell) => cell.inRange);
+  assert.equal(days.length, 366);
+  assert.ok(days.some((cell) => cell.date === "2024-02-29"));
 });
 
 test("empty periods have no intensity and do not invent activity", () => {

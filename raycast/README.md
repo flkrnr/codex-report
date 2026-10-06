@@ -61,8 +61,12 @@ is calculated relative to input tokens.
 
 Open **Show Activity Heatmap** directly or use the dashboard's Actions menu.
 It defaults to tokens, both agents, and six calendar months ending today.
-Actions switch to twelve months, messages, or estimated API costs. ⌘← / ⌘→
-move between windows; changing the window size returns to the current period.
+- ⌘1: Six months ending today
+- ⌘2: Current calendar year, January through December
+- ⌘← / ⌘→: Previous / next six-month window or calendar year
+
+Every year includes January through December, with empty cells for dates without usage. ⌘1 and ⌘2 return to the current
+period. Actions also switch between tokens, messages, and estimated API costs.
 
 Columns are weeks, Monday through Sunday. Month and weekday labels identify
 both axes. Grey means zero usage for the selected metric; dates outside the

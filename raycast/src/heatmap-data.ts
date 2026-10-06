@@ -1,7 +1,7 @@
 import { calendarDate } from "./periods";
 import { Agent, AgentSelection, CostSummary, Metric, Report } from "./report-data";
 
-export type HeatmapMonths = 6 | 12;
+export type HeatmapPeriod = "sixMonths" | "year";
 export type HeatmapRange = { from: string; to: string; title: string };
 export type HeatmapCell = {
   date: string; week: number; weekday: number; inRange: boolean;
@@ -12,10 +12,16 @@ export type Heatmap = {
   metric: Metric; agent: AgentSelection; range: HeatmapRange;
 };
 
-export function heatmapRange(months: HeatmapMonths, offset: number, now = new Date()): HeatmapRange {
-  const start = new Date(now.getFullYear(), now.getMonth() - months + 1 + offset * months, 1, 12);
-  const end = offset === 0 ? now : new Date(start.getFullYear(), start.getMonth() + months, 0, 12);
-  return { from: calendarDate(start), to: calendarDate(end), title: `${months} Months of Activity` };
+export function heatmapRange(period: HeatmapPeriod, offset: number, now = new Date()): HeatmapRange {
+  if (period === "year") {
+    const year = now.getFullYear() + offset;
+    const start = new Date(year, 0, 1, 12);
+    const end = new Date(year, 11, 31, 12);
+    return { from: calendarDate(start), to: calendarDate(end), title: `${year} Activity` };
+  }
+  const start = new Date(now.getFullYear(), now.getMonth() - 5 + offset * 6, 1, 12);
+  const end = offset === 0 ? now : new Date(start.getFullYear(), start.getMonth() + 6, 0, 12);
+  return { from: calendarDate(start), to: calendarDate(end), title: "6 Months of Activity" };
 }
 
 function metricValue(activity: Report["days"][number] | undefined, metric: Metric): number {

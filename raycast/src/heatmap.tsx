@@ -4,17 +4,17 @@ import { compact } from "./charts";
 import { imageMarkdown } from "./svg";
 import { AgentSelection, Metric, agentLabels, metrics, money } from "./report-data";
 import { useReport } from "./use-report";
-import { HeatmapMonths, buildHeatmap, heatmapRange } from "./heatmap-data";
+import { HeatmapPeriod, buildHeatmap, heatmapRange } from "./heatmap-data";
 import { heatmapImage } from "./heatmap-chart";
 import { HeatmapDays } from "./heatmap-days";
 import { ExportPngAction } from "./export-png";
 
 export default function HeatmapCommand() {
-  const [months, setMonths] = useState<HeatmapMonths>(6);
+  const [period, setPeriod] = useState<HeatmapPeriod>("sixMonths");
   const [offset, setOffset] = useState(0);
   const [agent, setAgent] = useState<AgentSelection>("all");
   const [metric, setMetric] = useState<Metric>("tokens");
-  const range = heatmapRange(months, offset);
+  const range = heatmapRange(period, offset);
   // Always load both agents so filtering is immediate and uses the same scale.
   const { report, loading, error, refresh } = useReport(range.from, range.to, "all");
   const map = report ? buildHeatmap(report, range, agent, metric) : undefined;
@@ -28,14 +28,14 @@ export default function HeatmapCommand() {
   const markdown = [
     `## ${range.title} · ${agentLabels[agent]}
 ${range.from} — ${range.to}`,
-    image ? imageMarkdown("Activity heatmap", image, months === 12 ? 1000 : image.width) : error ? "Could not load activity. Press ⌘R to retry." : "Reading local sessions…",
+    image ? imageMarkdown("Activity heatmap", image, period === "year" ? 1000 : image.width) : error ? "Could not load activity. Press ⌘R to retry." : "Reading local sessions…",
     `${activeDays} active days · ${formatValue(total)} ${metrics[metric].toLowerCase()}`,
     loading && report ? "Updating local sessions… Showing the last successful report." : "",
     note,
     costNote,
     error && report ? "Refresh failed. Showing the last successful report." : "",
   ].join("\n\n");
-  function changeWindow(value: HeatmapMonths) { setMonths(value); setOffset(0); }
+  function changePeriod(value: HeatmapPeriod) { setPeriod(value); setOffset(0); }
   return <Detail isLoading={loading} navigationTitle="Activity Heatmap" markdown={markdown}
     actions={<ActionPanel>
       {map && <Action.Push title="Show Daily Activity" icon={Icon.Calendar} target={<HeatmapDays map={map} formatValue={formatValue} />} />}
@@ -45,8 +45,8 @@ ${range.from} — ${range.to}`,
           shortcut={{ modifiers: ["cmd"], key: String(index + 4) as "4" | "5" | "6" }} onAction={() => setAgent(value)} />)}
       </ActionPanel.Section>
       <ActionPanel.Section title="Window">
-        <Action title="Show 6 Months" icon={Icon.Calendar} onAction={() => changeWindow(6)} />
-        <Action title="Show 12 Months" icon={Icon.Calendar} onAction={() => changeWindow(12)} />
+        <Action title="Show 6 Months" icon={Icon.Calendar} shortcut={{ modifiers: ["cmd"], key: "1" }} onAction={() => changePeriod("sixMonths")} />
+        <Action title="Show Current Year" icon={Icon.Calendar} shortcut={{ modifiers: ["cmd"], key: "2" }} onAction={() => changePeriod("year")} />
         <Action title="Previous Window" shortcut={{ modifiers: ["cmd"], key: "arrowLeft" }} onAction={() => setOffset((value) => value - 1)} />
         {offset < 0 && <Action title="Next Window" shortcut={{ modifiers: ["cmd"], key: "arrowRight" }} onAction={() => setOffset((value) => value + 1)} />}
       </ActionPanel.Section>
