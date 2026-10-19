@@ -1,6 +1,6 @@
 # Codex Report for Raycast (local MVP)
 
-Requirements: macOS, Raycast, and Node.js >= 20.
+Requirements: macOS, Raycast, and Node.js >= 22.15.0.
 
 From the `raycast` directory:
 

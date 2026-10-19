@@ -122,6 +122,7 @@ Prices are stored as USD per 1 million tokens for each known model:
 cost =
   (uncached_input_tokens / 1,000,000) * input_price
 + (cached_input_tokens   / 1,000,000) * cached_input_price
++ (cache_write_input_tokens / 1,000,000) * cache_write_price
 + (output_tokens         / 1,000,000) * output_price
 ```
 
@@ -129,15 +130,25 @@ cost =
 `uncached_input_tokens` is calculated as:
 
 ```text
-input_tokens - cached_input_tokens
+input_tokens - cached_input_tokens - cache_write_input_tokens
 ```
 
-The displayed `input` value includes both cached and uncached input. For cost
+The displayed `input` value includes ordinary input, cache reads, and cache writes. For cost
 sanity checks, the important split is:
 
 ```text
-uncached input + cached input + output
+ordinary input + cached input + cache-write input + output
 ```
+
+Cache writes are included in `input_tokens`, not added on top. This follows
+the [official prompt-caching formula](https://developers.openai.com/api/docs/guides/prompt-caching)
+and [Codex's response-usage mapping](https://github.com/openai/codex/blob/rust-v0.161.0/codex-rs/codex-api/src/sse/responses.rs).
+The report clamps writes to the input remaining after cache reads.
+GPT-6, GPT-6.1 Sol, and GPT-5.6 models use the documented cache-write rate of
+1.25x ordinary input, checked on 2026-10-08. Models without a documented
+cache-write rate retain ordinary input pricing for those tokens.
+Older logs without `cache_write_input_tokens` count zero writes; the report
+does not infer or reconstruct historical cache writes.
 
 ## Reasoning Tokens
 
@@ -158,10 +169,9 @@ not included.
 
 GPT-6 and GPT-5.6 estimates use standard processing prices. The report can identify many
 Fast-mode turns from local `service_tier` settings, but the cost estimate does
-not apply Fast-mode pricing. Cache writes and individual requests over the
-272K-input-token long-context threshold are also not identified reliably.
-Fast-mode premiums, 1.25x cache-write pricing, and long-context multipliers are
-therefore not included.
+not apply Fast-mode pricing. Reported cache writes are included at standard
+rates. Individual requests over the 272K-input-token long-context threshold
+are not identified reliably, so long-context multipliers are not included.
 
 The estimate answers a narrower question:
 

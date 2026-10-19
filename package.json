@@ -35,7 +35,7 @@
     "test:smoke": "node ./bin/codex-report.js --top 3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.15.0"
   },
   "license": "MIT"
 }

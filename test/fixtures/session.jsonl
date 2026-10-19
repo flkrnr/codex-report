@@ -1,0 +1,4 @@
+{"timestamp":"2026-10-01T10:00:00Z","type":"session_meta","payload":{"id":"compressed-fixture","cwd":"/tmp/codex-report-fixture"}}
+{"timestamp":"2026-10-01T10:00:00Z","type":"turn_context","payload":{"model":"gpt-6.1-sol","turn_id":"fixture-turn"}}
+{"timestamp":"2026-10-01T10:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"Grüße 👋"}}
+{"timestamp":"2026-10-01T10:00:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":2000000,"cached_input_tokens":1000000,"cache_write_input_tokens":500000,"output_tokens":100000,"total_tokens":2100000}}}}
