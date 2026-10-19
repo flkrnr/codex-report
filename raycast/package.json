@@ -14,12 +14,19 @@
       "title": "Show Codex Report",
       "description": "View local Codex and Claude activity and token usage",
       "mode": "view"
+    },
+    {
+      "name": "heatmap",
+      "title": "Show Activity Heatmap",
+      "description": "Calendar heatmap of Codex and Claude usage",
+      "mode": "view"
     }
   ],
   "scripts": {
     "dev": "node prepare.mjs && ray develop",
     "build": "node prepare.mjs && ray build -e dist",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p checks/tsconfig.json && node --test checks/*.cjs"
   },
   "dependencies": {
     "@raycast/api": "^1.104.0"
