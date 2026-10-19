@@ -25,7 +25,7 @@ export function useReport(from: string, to: string, agent: AgentSelection) {
     let cancelled = false;
     setState((current) => ({ key, report: current.key === key ? current.report : snapshots.read(key), loading: true }));
     const child = execFile(local.node, [join(environment.assetsPath, "codex-report.mjs"), "--agent", agent, "--global", "--json", "--from", from, "--to", to],
-      { maxBuffer: 16 * 1024 * 1024, timeout: 120_000 }, (failure, stdout) => {
+      { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }, (failure, stdout) => {
         if (cancelled) return;
         try {
           if (failure) throw new Error(failure.killed ? "Report timed out. Please try again." : failure.message);
