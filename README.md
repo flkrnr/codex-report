@@ -38,7 +38,7 @@ npm uninstall -g codex-report
 
 An experimental Raycast extension is included for local installation and testing
 on macOS. It is **not available in the Raycast Store** and is not included in the
-npm package. It requires Raycast, Git, and Node.js >= 20.
+npm package. It requires Raycast, Git, and Node.js >= 22.15.0.
 
 Install from a source checkout:
 
@@ -158,7 +158,7 @@ Data locations:
 
 | Agent | Transcripts | Override | Report cache |
 | --- | --- | --- | --- |
-| Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v8.json` |
+| Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v9.json` |
 | Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v1.json` |
 
 Claude Desktop chat, Cowork, and remote history are not included. Reports only
@@ -282,6 +282,9 @@ $ codex-report --global
 ## Notes
 
 - No external Node dependencies are required.
+- Requires Node.js 22.15.0 or newer for built-in Zstd support.
+- Reads both `.jsonl` and `.jsonl.zst` session logs. If both exist for the
+  same path, the plain file takes precedence to avoid double counting.
 - By default, the report is scoped to the current folder.
 - Use `--global` to report across all projects.
 - Repository totals prefer the recorded Git remote URL, then a live checkout's
@@ -307,7 +310,9 @@ $ codex-report --global
   profile dashboard because its exact aggregation rules are not public.
 - API cost totals are estimates based on OpenAI standard text-token list
   prices for each recognized model. Cached input is billed at the cached-input
-  rate, uncached input at the input rate, and output at the output rate.
+  rate, reported cache writes at the model's cache-write rate, ordinary input
+  at the input rate, and output at the output rate. Reads and writes are
+  already included in the displayed input total.
 - Cost estimates are computed from local logs only. They are not an invoice,
   do not include non-token tool charges or regional/batch pricing differences,
   skip models without a known official API price, and should be treated as an

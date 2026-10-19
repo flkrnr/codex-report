@@ -37,7 +37,7 @@ An adapter factory provides:
 The shared cache fingerprints files with size and mtime, stores agent identity
 and parser version, and uses atomic replacement. Dates, scope, prices and skill
 registry contents are applied after cache loading. Timestamp windows bypass the
-cache. Codex keeps its existing v8 daily cache; Claude caches normalized records
+cache. Codex uses a v9 daily cache including cache-write token counts; Claude caches normalized records
 because deduplication across forks/subagents needs request identities before
 summation. Adding a subagent or deleting a source file changes reconciliation
 without requiring unchanged parent transcripts to be reparsed.

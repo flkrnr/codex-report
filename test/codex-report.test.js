@@ -7,6 +7,10 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
+import { sessionLines } from "../lib/session-lines.js";
+import { constants, createZstdCompress, zstdCompressSync } from "node:zlib";
+import { Readable } from "node:stream";
+
 const execFileAsync = promisify(execFile);
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLI_PATH = path.join(REPO_ROOT, "bin", "codex-report.js");
@@ -14,6 +18,134 @@ const CLI_PATH = path.join(REPO_ROOT, "bin", "codex-report.js");
 function event(timestamp, type, payload) {
   return JSON.stringify({ timestamp, type, payload });
 }
+
+test("reads compressed sessions, prefers plain siblings, and survives storage transitions", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const dir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(dir, { recursive: true });
+  const plain = path.join(dir, "session.jsonl");
+  const compressed = `${plain}.zst`;
+  await fs.copyFile(path.join(REPO_ROOT, "test/fixtures/session.jsonl.zst"), compressed);
+  const args = ["--global", "--costs", "--activity", "--from", "2026-10-01", "--to", "2026-10-01"];
+  const first = await runReport(home, args);
+  assert.match(first, /gpt-6\.1-sol\s+\$3\.35/);
+  assert.match(first, /2026-10-01\s+1 msg/);
+  assert.equal(await runReport(home, [...args, "--no-cache"]), first);
+  const hit = await runReportResult(home, args);
+  assert.match(hit.stderr, /Cache hit: using 1 cached session file/);
+  await fs.copyFile(path.join(REPO_ROOT, "test/fixtures/session.jsonl"), plain);
+  // An invalid compressed sibling must be ignored when the plain file exists.
+  await fs.writeFile(compressed, "not zstd");
+  assert.equal(await runReport(home, args), first);
+  await fs.copyFile(path.join(REPO_ROOT, "test/fixtures/session.jsonl.zst"), compressed);
+  await fs.unlink(plain);
+  assert.equal(await runReport(home, args), first);
+  // A separate plain session is still counted alongside compressed storage.
+  await fs.writeFile(path.join(dir, "other.jsonl"), [
+    event("2026-10-01T11:00:00Z", "session_meta", { id: "other", cwd: REPO_ROOT }),
+    event("2026-10-01T11:01:00Z", "event_msg", { type: "user_message", message: "other" }),
+  ].join("\n"));
+  assert.match(await runReport(home, args), /2026-10-01\s+2 msg/);
+});
+
+test("fails explicitly on corrupt or truncated compressed sessions", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const dir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(dir, { recursive: true });
+  const compressed = await fs.readFile(path.join(REPO_ROOT, "test/fixtures/session.jsonl.zst"));
+  for (const data of [Buffer.from("not zstd"), compressed.subarray(0, compressed.length - 10)]) {
+    await fs.writeFile(path.join(dir, "broken.jsonl.zst"), data);
+    await assert.rejects(runReport(home, ["--global", "--no-cache"]));
+  }
+});
+
+test("cache-write deltas exclude the date-range baseline and are billed only once", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const dir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(dir, { recursive: true });
+  const usage = (input, cached, written, output) => ({
+    input_tokens: input, cached_input_tokens: cached, cache_write_input_tokens: written,
+    output_tokens: output, total_tokens: input + output,
+  });
+  await fs.writeFile(path.join(dir, "writes.jsonl"), [
+    event("2026-09-30T08:00:00Z", "session_meta", { id: "writes", cwd: REPO_ROOT }),
+    event("2026-09-30T08:01:00Z", "turn_context", { model: "gpt-6.1-sol" }),
+    event("2026-09-30T08:02:00Z", "event_msg", { type: "token_count", info: { total_token_usage: usage(1000000, 0, 1000000, 100000) } }),
+    event("2026-10-01T08:00:00Z", "event_msg", { type: "token_count", info: { total_token_usage: usage(3000000, 1000000, 1500000, 200000) } }),
+  ].join("\n"));
+  const args = ["--global", "--costs", "--from", "2026-10-01", "--to", "2026-10-01"];
+  const output = await runReport(home, args);
+  assert.match(output, /Total estimated API cost: \$3\.35/);
+  assert.match(output, /cache writes: 500K tokens included in input/);
+  assert.equal(await runReport(home, args), output);
+  assert.equal(await runReport(home, [...args, "--no-cache"]), output);
+});
+
+test("streams concatenated Zstd frames and UTF-8 across file chunks", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-stream-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const compressed = await fs.readFile(path.join(REPO_ROOT, "test/fixtures/session.jsonl.zst"));
+  const plain = await fs.readFile(path.join(REPO_ROOT, "test/fixtures/session.jsonl"), "utf8");
+  const repeated = path.join(dir, "large.jsonl.zst");
+  await fs.writeFile(repeated, Buffer.concat(Array(400).fill(compressed)));
+  assert.ok((await fs.stat(repeated)).size > 65536);
+  const actual = [];
+  for await (const line of sessionLines(repeated)) actual.push(line);
+  assert.deepEqual(actual, plain.repeat(400).split(/\r?\n/));
+  const utf8 = path.join(dir, "utf8.jsonl");
+  const longLine = `${"x".repeat(65535)}👋 Grüße`;
+  await fs.writeFile(utf8, `${longLine}\r\nlast`);
+  const lines = [];
+  for await (const line of sessionLines(utf8)) lines.push(line);
+  assert.deepEqual(lines, [longLine, "last"]);
+});
+
+test("reads native multi-block and streaming frames and validates checksums", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-native-zstd-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const text = `${"Grüße 👋\n".repeat(40000)}last`;
+  const bytes = Buffer.from(text);
+  const checksummed = zstdCompressSync(bytes, { params: { [constants.ZSTD_c_checksumFlag]: 1 } });
+  const streamed = [];
+  for await (const chunk of Readable.from([bytes]).compose(createZstdCompress())) streamed.push(chunk);
+  const file = path.join(dir, "native.jsonl.zst");
+  for (const data of [checksummed, Buffer.concat(streamed)]) {
+    await fs.writeFile(file, data);
+    const lines = [];
+    for await (const line of sessionLines(file)) lines.push(line);
+    assert.deepEqual(lines, text.split("\n"));
+  }
+  const invalidChecksum = Buffer.from(checksummed);
+  invalidChecksum[invalidChecksum.length - 1] ^= 1;
+  for (const data of [invalidChecksum, checksummed.subarray(0, checksummed.length - 1), Buffer.concat([checksummed, Buffer.from("junk")])]) {
+    await fs.writeFile(file, data);
+    await assert.rejects(async () => {
+      for await (const line of sessionLines(file)) void line;
+    }, /Unable to read session/);
+  }
+});
+
+test("clamps cache writes to remaining input and preserves older model pricing", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const dir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(dir, { recursive: true });
+  for (const model of ["gpt-6.1-sol", "gpt-5"]) {
+    await fs.writeFile(path.join(dir, `${model}.jsonl`), [
+      event("2026-10-01T10:00:00Z", "session_meta", { id: model, cwd: REPO_ROOT }),
+      event("2026-10-01T10:01:00Z", "turn_context", { model }),
+      event("2026-10-01T10:02:00Z", "event_msg", { type: "token_count", info: {
+        last_token_usage: { input_tokens: 1000000, cached_input_tokens: 400000, cache_write_input_tokens: 2000000, output_tokens: 0, total_tokens: 1000000 },
+      } }),
+    ].join("\n"));
+  }
+  const output = await runReport(home, ["--global", "--costs"]);
+  assert.match(output, /gpt-6\.1-sol\s+\$1\.54/);
+  assert.match(output, /gpt-5\s+\$0\.80/);
+});
 
 async function runReport(home, args) {
   const { stdout } = await runReportResult(home, args);
@@ -33,7 +165,7 @@ test("clears every Codex Report session cache and leaves unrelated files", async
 
   const cacheDir = path.join(home, ".codex", "cache");
   const oldCache = path.join(cacheDir, "codex-report-sessions-v1.json");
-  const currentCache = path.join(cacheDir, "codex-report-sessions-v8.json");
+  const currentCache = path.join(cacheDir, "codex-report-sessions-v9.json");
   const unrelated = path.join(cacheDir, "other-cache.json");
   await fs.mkdir(cacheDir, { recursive: true });
   await Promise.all([
@@ -108,7 +240,7 @@ test("counts skill evidence and reuses one cache entry across date ranges", asyn
   assert.match(first, /\$skill mentions\s+2/);
   assert.match(first, /demo\s+2 reads/);
 
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v8.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v9.json");
   const firstCache = JSON.parse(await fs.readFile(cachePath, "utf8"));
   assert.equal(Object.keys(firstCache.entries).length, 1);
 
@@ -149,7 +281,7 @@ test("bypasses day cache for precise timestamp ranges", async (t) => {
     "2026-08-14T12:00:00Z",
   ]);
   assert.match(output, /gpt-5\s+1 turns/);
-  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v8.json")));
+  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v9.json")));
 });
 
 test("reuses legacy cache for reports that do not request insights", async (t) => {
@@ -183,7 +315,7 @@ test("reuses legacy cache for reports that do not request insights", async (t) =
   await fs.writeFile(firstSessionPath, sessionLines);
   await fs.writeFile(secondSessionPath, sessionLines.replace("legacy-cache", "legacy-cache-2"));
 
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v8.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v9.json");
   const range = ["--global", "--from", "2026-08-14", "--to", "2026-08-14"];
   await runReport(home, [...range, "--activity"]);
   const legacyCache = JSON.parse(await fs.readFile(cachePath, "utf8"));
