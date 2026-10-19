@@ -8,7 +8,8 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SOURCE_COLORS = { ...agentColors, tie: "#A78BFA" };
 const SOURCE_LABELS = { ...agentLabels, tie: "Equal share" };
 const OPACITY = [0, 0.35, 0.55, 0.75, 1];
-const LEFT = 38;
+const WIDTH = 560;
+const LEFT = 80;
 const TOP = 54;
 
 function tileSvg(week: number, row: number, size: number, gap: number, track: string, color?: string, opacity = 1, title = ""): string {
@@ -70,7 +71,7 @@ export function heatmapImage(map: Heatmap, dark: boolean, formatValue: (value: n
   const text = dark ? "#eeeeee" : "#222222";
   const muted = dark ? "#aaaaaa" : "#666666";
   const gap = map.weeks > 32 ? 2.5 : 4;
-  const size = Math.min(17, (522 - gap * (map.weeks - 1)) / map.weeks);
+  const size = Math.min(17, (WIDTH - LEFT - gap * (map.weeks - 1)) / map.weeks);
   const bottom = TOP + 7 * (size + gap);
   const weekly = view === "weekly" ? buildWeeklyHeatmap(map) : undefined;
   const days = axisLabels(weekly, size, gap, muted, formatValue);
@@ -84,5 +85,5 @@ export function heatmapImage(map: Heatmap, dark: boolean, formatValue: (value: n
   if (peak === 0) scale = `<text x="${LEFT}" y="${bottom + 41}" fill="${muted}" font-size="10">${map.metric === "costs" ? "No priced costs" : "No usage for this metric"}</text>`;
   const cells = weekly ? weeklyTiles(weekly, map, size, gap, track) : map.cells.map((cell) => cellSvg(cell, map, size, gap, track)).join("");
   const title = `Activity · ${metrics[map.metric]} · ${view === "daily" ? "Daily" : "Weekly"}`;
-  return { width: 560, height: Math.ceil(bottom + 57), body: `<g font-family="-apple-system,Helvetica,sans-serif"><text x="0" y="17" fill="${text}" font-size="14" font-weight="600">${title}</text>${monthLabels(map, size, gap, muted)}${days}${cells}${legend}${scale}</g>` };
+  return { width: WIDTH, height: Math.ceil(bottom + 57), body: `<g font-family="-apple-system,Helvetica,sans-serif"><text x="0" y="17" fill="${text}" font-size="14" font-weight="600">${title}</text>${monthLabels(map, size, gap, muted)}${days}${cells}${legend}${scale}</g>` };
 }

@@ -100,3 +100,27 @@ test("weekly shares form contiguous Codex then Claude segments using the selecte
   assert.ok(!svg.includes("100%"));
   assert.ok(!svg.includes("Equal share"));
 });
+
+
+test("currency axis labels fit the margin and year grids stay inside the image", () => {
+  const money = value => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  const costs = [entry("2026-03-03", "codex", 100, 1, 1000000)];
+  for (const period of ["sixMonths", "year"]) {
+    const window = heatmapRange(period, 0, new Date(2026, 2, 10, 12));
+    const map = buildHeatmap({ days: costs, agentDays: costs }, window, "all", "costs");
+    for (const view of ["daily", "weekly"]) {
+      const image = heatmapImage(map, true, money, view);
+      const rectangles = [...image.body.matchAll(/<rect x="([\d.]+)" y="[\d.]+" width="([\d.]+)"/g)];
+      assert.ok(rectangles.length > 0);
+      for (const [, x, width] of rectangles) assert.ok(Number(x) + Number(width) <= image.width + 1e-9);
+      if (view === "weekly") {
+        const axis = [...image.body.matchAll(/<text x="([\d.]+)"[^>]*text-anchor="end"[^>]*font-size="([\d.]+)">([^<]+)<\/text>/g)];
+        assert.equal(axis.length, 3);
+        assert.equal(axis[0][3], "≤ $1,000,000.00");
+        // System font measurement: this label is 65 points wide at size 8.
+        assert.ok(Number(axis[0][1]) >= 65 * Number(axis[0][2]) / 8);
+        assert.ok(Number(axis[0][1]) < Number(rectangles[0][1]));
+      }
+    }
+  }
+});
