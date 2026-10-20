@@ -26,7 +26,7 @@ export default function Command() {
   const [agent, setAgent] = useState<AgentSelection>("all");
   const [metric, setMetric] = useState<Metric>("tokens");
   const { from, to, dates, title: periodTitle } = periodRange(period, offset);
-  const { report, loading, error, refresh } = useReport(from, to, agent);
+  const { report, loading, error, refresh } = useReport(from, to, agent, "repositories");
   const title = `${periodTitle} · ${agentLabels[agent]}`;
   function changePeriod(next: Period) {
     setPeriod(next);

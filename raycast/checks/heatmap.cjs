@@ -4,6 +4,9 @@ const test = require("node:test");
 const { buildHeatmap, heatmapRange, heatmapLevel } = require("../.test-build/heatmap-data.js");
 const { heatmapImage } = require("../.test-build/heatmap-chart.js");
 const { imageMarkdown } = require("../.test-build/svg.js");
+// Outer tile boxes: tiles are inset squares widened by a round-joined stroke of the same fill.
+const tiles = (body) => [...body.matchAll(/<path d="([^"]+)" fill="([^"]+)" stroke="[^"]+" stroke-width="([\d.]+)"/g)].flatMap(([, d, fill, stroke]) =>
+  [...d.matchAll(/M([\d.]+) ([\d.]+)h([\d.]+)v\3h-\3z/g)].map(([, x, y, inner]) => ({ x: +x - stroke / 2, y: +y - stroke / 2, size: +inner + +stroke, fill })));
 
 const cost = (value = 0) => ({ totalCost: value, pricedTokens: 0, unpricedTokens: 0 });
 const contribution = (date, agent, tokens, messages = 1) => ({ date, agent, tokens, messages, cost: { ...cost(tokens / 100), pricedTokens: tokens } });
@@ -90,7 +93,7 @@ test("ties have a separate color, filters select their own agent, and small majo
   const image = heatmapImage(tied, true, String);
   assert.ok(image.body.includes("Equal share"));
   const tieColor = image.body.match(/<circle[^>]*fill="([^"]+)"\/><text[^>]*>Equal share<\/text>/)[1];
-  assert.ok(image.body.includes(`fill="${tieColor}"/></g>`));
+  assert.ok(tiles(image.body).some((tile) => tile.fill === tieColor));
   for (const agent of ["codex", "claude"]) {
     const filtered = buildHeatmap(data, range, agent, "tokens");
     assert.equal(filtered.cells.find((cell) => cell.date === date).dominantAgent, agent);
@@ -113,6 +116,9 @@ test("window navigation handles current partial months and past year boundaries"
   assert.equal(currentYear.cells.filter((cell) => cell.inRange).length, 365);
   assert.ok(currentYear.cells.some((cell) => cell.inRange && cell.date === "2026-12-31" && cell.value === 0));
   const svg = heatmapImage(currentYear, true, String).body;
+  assert.equal(tiles(svg).length, 365);
+  // Raycast's UI time grows with markdown size; the previous ~100 KB year image timed out.
+  assert.ok(svg.length < 15000, `year SVG is ${svg.length} bytes`);
   assert.ok(svg.includes(">Nov</text>"));
   assert.ok(svg.includes(">Dec</text>"));
   const leapYear = heatmapRange("year", -2, now);
@@ -133,10 +139,13 @@ test("SVG labels both axes and renders single-color cells without split geometry
   assert.equal(image.width, 560);
   for (const label of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Mar", "Codex", "Claude"]) assert.ok(image.body.includes(label));
   assert.ok(!image.body.includes("<clipPath"));
-  assert.ok(!image.body.includes("<path "));
   assert.ok(image.body.includes('fill="#228cf6"'));
   assert.ok(image.body.includes('fill="#D97757"'));
-  assert.ok(image.body.includes('opacity="1"'));
+  const days = tiles(image.body);
+  assert.equal(days.length, 31);
+  assert.equal(days.find((tile) => tile.fill === "#228cf6")?.size, 17);
+  // Opacity makes renderers composite per tile; fills are pre-blended over the track instead.
+  assert.ok(!/[\s"]opacity=/.test(image.body));
   assert.ok(!image.body.includes("NaN"));
   assert.ok(!image.body.includes("Infinity"));
   assert.match(imageMarkdown("Heatmap", image), /data:image\/svg\+xml;base64/);

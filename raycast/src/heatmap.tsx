@@ -16,8 +16,8 @@ export default function HeatmapCommand() {
   const [agent, setAgent] = useState<AgentSelection>("all");
   const [metric, setMetric] = useState<Metric>("tokens");
   const range = heatmapRange(period, offset);
-  // Always load both agents so filtering is immediate and uses the same scale.
-  const { report, loading, error, refresh } = useReport(range.from, range.to, "all");
+  // Load all agents and all history once so filters and window switches never wait for the CLI.
+  const { report, loading, error, refresh } = useReport("null", undefined, "all", "activity");
   const map = report ? buildHeatmap(report, range, agent, metric) : undefined;
   const formatValue = metric === "costs" ? money : compact;
   const image = map ? heatmapImage(map, environment.appearance === "dark", formatValue, view) : undefined;

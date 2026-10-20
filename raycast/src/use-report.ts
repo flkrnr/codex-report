@@ -10,10 +10,11 @@ const snapshots = createReportCache(new Cache({ namespace: "reports-v1" }));
 
 type ReportState = { key: string; report?: Report; loading: boolean; error?: string };
 
-export function useReport(from: string, to: string, agent: AgentSelection) {
+/** `section` limits the CLI's slow git/skill lookups to what the command shows; without `to` the CLI reports through today. */
+export function useReport(from: string, to: string | undefined, agent: AgentSelection, section: "activity" | "repositories") {
   const reports = useRef(new Map<string, Report>());
   const [revision, setRevision] = useState(0);
-  const key = `${from}:${to}:${agent}`;
+  const key = `${from}:${to ?? "today"}:${agent}:${section}`;
   const [state, setState] = useState<ReportState>(() => ({ key, report: snapshots.read(key), loading: true }));
 
   useEffect(() => {
@@ -24,7 +25,7 @@ export function useReport(from: string, to: string, agent: AgentSelection) {
     }
     let cancelled = false;
     setState((current) => ({ key, report: current.key === key ? current.report : snapshots.read(key), loading: true }));
-    const child = execFile(local.node, [join(environment.assetsPath, "codex-report.mjs"), "--agent", agent, "--global", "--json", "--from", from, "--to", to],
+    const child = execFile(local.node, [join(environment.assetsPath, "codex-report.mjs"), "--agent", agent, "--global", "--json", `--${section}`, "--from", from, ...(to ? ["--to", to] : [])],
       { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }, (failure, stdout) => {
         if (cancelled) return;
         try {
@@ -41,7 +42,7 @@ export function useReport(from: string, to: string, agent: AgentSelection) {
         }
       });
     return () => { cancelled = true; child.kill(); };
-  }, [from, to, agent, key, revision]);
+  }, [from, to, agent, section, key, revision]);
 
   function refresh() {
     // Every agent view must be refreshed after new activity, not just the visible one.

@@ -19,6 +19,10 @@ const report = { agentDays: entries, days: entries }; // One contribution per da
 const weekly = (agent = "all", metric = "tokens", data = report, window = range) =>
   buildWeeklyHeatmap(buildHeatmap(data, window, agent, metric));
 
+// Outer tile boxes: tiles are inset squares widened by a round-joined stroke of the same fill.
+const tiles = (body) => [...body.matchAll(/<path d="([^"]+)" fill="([^"]+)" stroke="[^"]+" stroke-width="([\d.]+)"/g)].flatMap(([, d, fill, stroke]) =>
+  [...d.matchAll(/M([\d.]+) ([\d.]+)h([\d.]+)v\3h-\3z/g)].map(([, x, y, inner]) => ({ x: +x - stroke / 2, y: +y - stroke / 2, size: +inner + +stroke, fill })));
+
 test("weekly sums clip boundaries and aggregate each agent across days", () => {
   const result = weekly();
   assert.equal(result.peak, 100);
@@ -70,9 +74,8 @@ test("weekly SVG stacks solid blocks from the bottom and labels its volume scale
   assert.ok(image.body.includes("Activity · Tokens · Weekly"));
   assert.ok(image.body.includes("Square-root scale"));
   assert.ok(!image.body.includes(">Mon</text>"));
-  assert.equal((image.body.match(/<g opacity="1">/g) || []).length, 11);
-  assert.ok(image.body.includes("2026-03-09 — 2026-03-10: 30 tokens · Claude: 30"));
-  assert.ok(image.body.includes('y="117" width="17" height="17" rx="4" fill="#D97757"'));
+  assert.equal(tiles(image.body).filter((tile) => tile.fill !== "#303030").length, 11);
+  assert.ok(tiles(image.body).some((tile) => tile.y === 117 && tile.size === 17 && tile.fill === "#D97757"));
   const empty = buildHeatmap({ days: [], agentDays: [] }, range, "all", "costs");
   assert.ok(heatmapImage(empty, true, String, "weekly").body.includes("No priced costs"));
 });
@@ -94,8 +97,8 @@ test("weekly shares form contiguous Codex then Claude segments using the selecte
   const result = weekly("all", "tokens", { days: small, agentDays: small });
   assert.deepEqual(weeklyBlocks(result.weeks[0], result.peak, "all", "tokens"), Array(7).fill("codex"));
   const svg = heatmapImage(buildHeatmap(report, range, "all", "tokens"), true, String, "weekly").body;
-  assert.ok(svg.includes('y="138" width="17" height="17" rx="4" fill="#228cf6"'));
-  assert.ok(svg.includes('y="117" width="17" height="17" rx="4" fill="#D97757"'));
+  assert.ok(tiles(svg).some((tile) => tile.y === 138 && tile.size === 17 && tile.fill === "#228cf6"));
+  assert.ok(tiles(svg).some((tile) => tile.y === 117 && tile.size === 17 && tile.fill === "#D97757"));
   assert.ok(svg.includes("≤ 100</text>"));
   assert.ok(!svg.includes("100%"));
   assert.ok(!svg.includes("Equal share"));
@@ -110,16 +113,17 @@ test("currency axis labels fit the margin and year grids stay inside the image",
     const map = buildHeatmap({ days: costs, agentDays: costs }, window, "all", "costs");
     for (const view of ["daily", "weekly"]) {
       const image = heatmapImage(map, true, money, view);
-      const rectangles = [...image.body.matchAll(/<rect x="([\d.]+)" y="[\d.]+" width="([\d.]+)"/g)];
-      assert.ok(rectangles.length > 0);
-      for (const [, x, width] of rectangles) assert.ok(Number(x) + Number(width) <= image.width + 1e-9);
+      const grid = tiles(image.body);
+      assert.ok(grid.length > 0);
+      // Coordinates are rounded to 0.1 px to keep the markdown small.
+      for (const tile of grid) assert.ok(tile.x + tile.size <= image.width + 0.1);
       if (view === "weekly") {
         const axis = [...image.body.matchAll(/<text x="([\d.]+)"[^>]*text-anchor="end"[^>]*font-size="([\d.]+)">([^<]+)<\/text>/g)];
         assert.equal(axis.length, 3);
         assert.equal(axis[0][3], "≤ $1,000,000.00");
         // System font measurement: this label is 65 points wide at size 8.
         assert.ok(Number(axis[0][1]) >= 65 * Number(axis[0][2]) / 8);
-        assert.ok(Number(axis[0][1]) < Number(rectangles[0][1]));
+        assert.ok(Number(axis[0][1]) < Math.min(...grid.map((tile) => tile.x)));
       }
     }
   }
