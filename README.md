@@ -196,6 +196,8 @@ version 1 retains the Raycast fields and adds `selectedAgents`, `agents`, `agent
 coverage, cost assumptions, and cache-write token fields. Terminal and JSON outputs
 use the same aggregated report. `agentDays` contains messages, tokens, and cost
 coverage per date and agent; these contributions sum to the daily totals.
+Section flags with `--json` skip the slower repository (Git) and skill lookups
+unless `--repositories` or `--skills` is given; all other fields stay complete.
 `--clear-cache --json` emits `{ "clearedCacheFiles": N }`.
 
 See [Agent adapters](docs/agent-adapters.md) for the implementation boundary and

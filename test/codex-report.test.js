@@ -613,6 +613,12 @@ test("groups remote worktrees, local repositories, and non-Git directories", asy
   });
   assert.equal(report.repositories.find((repo) => repo.name.endsWith("local-repo")).sessions, 2);
   assert.equal(report.repositories.reduce((total, repo) => total + repo.sessions, 0), 5);
+  const range = ["--global", "--json", "--from", "2026-08-14", "--to", "2026-08-14"];
+  assert.deepEqual(JSON.parse(await runReport(home, [...range, "--repositories"])).repositories, report.repositories);
+  const activity = JSON.parse(await runReport(home, [...range, "--activity"]));
+  assert.deepEqual(activity.repositories, []);
+  assert.deepEqual(activity.skills.activeSkills, []);
+  assert.deepEqual(activity.days, report.days);
 });
 
 test("aggregates activity by month", async (t) => {
