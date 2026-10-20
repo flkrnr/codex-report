@@ -116,4 +116,4 @@ jobs:
           tag="v$RELEASE_VERSION"
           git tag -a "$tag" -m "codex-report $tag" -m "publish-to-npm=$PUBLISH_TO_NPM"
           git push origin "$tag"
-          gh release create "$tag" --draft --target main --title "codex-report $tag" --generate-notes
+          gh release create "$tag" --draft --target main --title "$tag" --generate-notes
