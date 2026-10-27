@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { normalizeClaudeTokens } from "../lib/adapters/claude.js";
 
 const exec = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -55,6 +56,40 @@ function withoutGenerated(json) {
   return stable;
 }
 
+test("counts compaction iterations once and selects Haiku pricing per iteration", async (t) => {
+  const home = await homeFor(t);
+  const usage = {
+    input_tokens: 23_000, output_tokens: 1_000, output_tokens_details: { thinking_tokens: 100 },
+    iterations: [
+      { type: "compaction", input_tokens: 180_000, output_tokens: 3_500 },
+      { type: "message", input_tokens: 23_000, output_tokens: 1_000 },
+    ],
+  };
+  const response = assistant("compaction", undefined, usage);
+  response.message.model = "claude-haiku-5-5";
+  await put(home, ".claude/projects/project/parent.jsonl", [user("u"), response, { ...response, uuid: "copy" }]);
+  const { json } = await report(home, ["--global"]);
+  assert.equal(json.tokens.input_tokens, 203_000);
+  assert.equal(json.tokens.output_tokens, 4_500);
+  assert.equal(json.tokens.total_tokens, 207_500);
+  assert.equal(json.tokens.reasoning_output_tokens, 100);
+  assert.equal(json.tokens.long_context_input_tokens, 180_000);
+  assert.ok(Math.abs(json.costEstimate.totalCost - 0.10155) < 1e-12);
+  const hit = await report(home, ["--global"]);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(bypass.json));
+  const onlyCompaction = normalizeClaudeTokens({
+    input_tokens: 0, output_tokens: 0, iterations: [usage.iterations[0]],
+  }, "claude-haiku-5-5");
+  assert.equal(onlyCompaction.total_tokens, 183_500);
+  const twoShort = normalizeClaudeTokens({
+    input_tokens: 160_000, output_tokens: 20,
+    iterations: [{ input_tokens: 80_000, output_tokens: 10 }, { input_tokens: 80_000, output_tokens: 10 }],
+  }, "claude-haiku-5-5");
+  assert.equal(twoShort.input_tokens, 160_000);
+  assert.equal(twoShort.long_context_input_tokens, 0);
+});
+
 test("Haiku 5.5 selects tiers per inclusive request, retaining snapshots and cached breakdowns", async (t) => {
   const home = await homeFor(t);
   const usage = (input) => ({
@@ -92,7 +127,7 @@ test("Haiku 5.5 selects tiers per inclusive request, retaining snapshots and cac
   assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(bypass.json));
   const selected = await report(home, ["--global", "--from", "2026-08-15"]);
   assert.ok(Math.abs(selected.json.costEstimate.totalCost - 0.0272505) < 1e-12);
-  await fs.access(path.join(home, ".claude/cache/codex-report-claude-sessions-v2.json"));
+  await fs.access(path.join(home, ".claude/cache/codex-report-claude-sessions-v3.json"));
 });
 
 test("normalizes Claude tokens, cache write durations, reasoning and pricing", async (t) => {
@@ -276,7 +311,7 @@ test("skills use Claude Read, Bash, Skill and user evidence without catalog fals
   assert.equal(json.skills.withEvidenceCount, 1);
   const { stdout } = await run(home, ["--agent", "claude", "--skills", ...WINDOW]);
   assert.match(stdout, /2 reads/);
-  const cache = await fs.readFile(path.join(home, ".claude/cache/codex-report-claude-sessions-v2.json"), "utf8");
+  const cache = await fs.readFile(path.join(home, ".claude/cache/codex-report-claude-sessions-v3.json"), "utf8");
   assert.ok(!cache.includes("this") && !cache.includes("catalog"));
 });
 
@@ -308,7 +343,7 @@ test("Claude cache invalidates changed files, handles corruption and clears only
   const changed = await report(home);
   assert.equal(changed.json.messages, 3);
   assert.match(changed.stderr, /Cache miss/);
-  const cache = path.join(home, ".claude/cache/codex-report-claude-sessions-v2.json");
+  const cache = path.join(home, ".claude/cache/codex-report-claude-sessions-v3.json");
   await fs.writeFile(cache, "invalid");
   assert.equal((await report(home)).json.messages, 3);
   const invalidShape = JSON.parse(await fs.readFile(cache, "utf8"));

@@ -159,7 +159,7 @@ Data locations:
 | Agent | Transcripts | Override | Report cache |
 | --- | --- | --- | --- |
 | Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v9.json` |
-| Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v2.json` |
+| Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v3.json` |
 
 Claude Desktop chat, Cowork, and remote history are not included. Reports only
 cover transcript files still present locally; they cannot recover deleted history.

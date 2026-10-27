@@ -254,8 +254,20 @@ The adapter selects the tier per request, after including cache reads and
 writes in input and before merging daily/model totals. Output length does not
 affect the threshold. Long-context token subsets preserve that decision through
 deduplication, date filtering, caching and all report breakdowns. The Claude
-cache version is bumped to v2 so old cached records are reparsed.
+cache version is bumped to v3 so old cached records are reparsed.
 
 Sonnet 5.5 cache reads were corrected to $0.10 per million on 2026-10-27;
 Sonnet 5 retains its separate $0.20 rate. The table remains a current-price
 estimate for selected usage, not a reconstruction of historical invoices.
+
+### Compaction usage
+
+When `usage.iterations` is present and non-empty, its entries are authoritative.
+They include compaction and regular sampling; the top-level input/output fields
+repeat non-compaction usage and must not be added again. Each iteration is
+normalized and priced at its own prompt-length tier. Thinking sub-counts from
+the top level are retained without billing them separately.
+
+This follows Anthropic's [compaction usage documentation](https://platform.claude.com/docs/en/build-with-claude/compaction-threshold).
+Old Claude records are reparsed using cache v3 so compaction costs and tiers
+are available on cache hits as well.
