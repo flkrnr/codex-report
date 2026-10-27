@@ -2,6 +2,7 @@ import { Cache, Toast, environment, showToast } from "@raycast/api";
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { useEffect, useRef, useState } from "react";
+import { cliErrorMessage } from "./cli-error";
 import { createReportCache } from "./report-cache";
 import { AgentSelection, Report } from "./report-data";
 
@@ -44,10 +45,11 @@ export function useReport(
         ...(to ? ["--to", to] : []),
       ],
       { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 },
-      (failure, stdout) => {
+      (failure, stdout, stderr) => {
         if (cancelled) return;
         try {
-          if (failure) throw new Error(failure.killed ? "Report timed out. Please try again." : failure.message);
+          if (failure)
+            throw new Error(failure.killed ? "Report timed out. Please try again." : cliErrorMessage(stderr));
           const report = JSON.parse(stdout) as Report;
           if (report.schemaVersion !== 1) throw new Error("Unsupported report format");
           snapshots.write(key, report);

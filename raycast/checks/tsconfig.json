@@ -9,6 +9,7 @@
     "../src/heatmap-data.ts",
     "../src/heatmap-chart.ts",
     "../src/svg.ts",
-    "../src/report-cache.ts"
+    "../src/report-cache.ts",
+    "../src/cli-error.ts"
   ]
 }
