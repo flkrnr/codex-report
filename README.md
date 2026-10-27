@@ -102,6 +102,11 @@ Delete all Codex Report session caches for both agents and exit:
 codex-report --clear-cache
 ```
 
+Cache directories may be shared by several installed versions, such as an npx
+CLI and a pinned Raycast copy. Cache writes therefore remove only this tool's
+interrupted temporary files after 10 minutes and older cache versions unused
+for 30 days. Current and newer cache versions are never removed automatically.
+
 Print only selected sections without the boxed summary:
 
 ```bash

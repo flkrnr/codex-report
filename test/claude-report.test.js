@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { normalizeClaudeTokens } from "../lib/adapters/claude.js";
 
 const exec = promisify(execFile);
@@ -476,6 +476,48 @@ test("Claude cache invalidates changed files, handles corruption and clears only
   assert.equal(JSON.parse(cleared.stdout).clearedCacheFiles, 2);
   await assert.rejects(fs.access(cache));
   await fs.access(unrelated);
+});
+
+test("cache writes remove abandoned temporaries and long-unused older versions only", async (t) => {
+  const home = await homeFor(t);
+  await put(home, ".claude/projects/project/parent.jsonl", [user("u1"), assistant("a1")]);
+  const dir = path.join(home, ".claude/cache");
+  const uuid = "e960654a-b694-4999-a8ac-c6e8dafd0974";
+  const ages = new Map([
+    [`codex-report-claude-sessions-v1.json.${uuid}.tmp`, 11 * 60_000],
+    [`codex-report-claude-sessions-v4.json.${uuid.replace("e", "f")}.tmp`, 60_000],
+    [`unrelated.json.${uuid}.tmp`, 60 * 60_000],
+    ["codex-report-claude-sessions-v1.json", 31 * 86_400_000],
+    ["codex-report-claude-sessions-v2.json", 29 * 86_400_000],
+    ["codex-report-claude-sessions-v99.json", 365 * 86_400_000],
+  ]);
+  await fs.mkdir(dir, { recursive: true });
+  for (const [name, age] of ages) {
+    await fs.writeFile(path.join(dir, name), "{}");
+    const time = new Date(Date.now() - age);
+    await fs.utimes(path.join(dir, name), time, time);
+  }
+  await report(home);
+  assert.deepEqual((await fs.readdir(dir)).sort(), [
+    "codex-report-claude-sessions-v2.json",
+    "codex-report-claude-sessions-v4.json",
+    `codex-report-claude-sessions-v4.json.${uuid.replace("e", "f")}.tmp`,
+    "codex-report-claude-sessions-v99.json",
+    `unrelated.json.${uuid}.tmp`,
+  ]);
+});
+
+test("an interrupted cache write removes its temporary file", async (t) => {
+  const home = await homeFor(t);
+  await put(home, ".claude/projects/project/parent.jsonl", [user("u1"), assistant("a1")]);
+  // Simulate Raycast's child.kill() between writing and renaming the temporary file.
+  const preload = path.join(home, "interrupt-rename.mjs");
+  await fs.writeFile(preload, 'import fs from "node:fs/promises";\nfs.rename = () => { process.kill(process.pid, "SIGTERM"); return new Promise((resolve) => setTimeout(resolve, 10_000)); };\n');
+  await assert.rejects(
+    exec(process.execPath, ["--import", pathToFileURL(preload).href, CLI, "--agent", "claude", "--json"], { env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: "" } }),
+    (error) => error.signal === "SIGTERM",
+  );
+  assert.deepEqual(await fs.readdir(path.join(home, ".claude/cache")), []);
 });
 
 test("folder scope selects Claude projects and falls back to selected agents only", async (t) => {
