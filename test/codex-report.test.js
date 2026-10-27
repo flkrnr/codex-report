@@ -490,6 +490,92 @@ test("subagent threads join their root session and Guardian reviews add only tok
   assert.deepEqual(withoutGenerated(JSON.parse(await runReport(home, [...args, "--no-cache"]))), withoutGenerated(json));
 });
 
+async function rollout(home, day, id, events, mtime) {
+  const dir = path.join(home, ".codex", "sessions", "2026", "08", day);
+  await fs.mkdir(dir, { recursive: true });
+  const file = path.join(dir, `rollout-2026-08-${day}T08-00-00-${id}.jsonl`);
+  await fs.writeFile(file, events.join("\n"));
+  if (mtime) await fs.utimes(file, new Date(mtime), new Date(mtime));
+  return file;
+}
+
+const threadUuid = (n) => `00000000-0000-7000-8000-00000000000${n}`;
+
+test("skips rollouts outside the period and keeps their cache entries", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const thread = (id, timestamp) => [
+    event(timestamp, "session_meta", { id, cwd: REPO_ROOT }),
+    event(timestamp, "turn_context", { turn_id: `${id}-turn`, model: "gpt-5" }),
+    event(timestamp, "event_msg", { type: "user_message", message: "hello" }),
+    event(timestamp, "event_msg", { type: "token_count", info: { last_token_usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 } } }),
+  ];
+  await rollout(home, "10", threadUuid(1), thread(threadUuid(1), "2026-08-10T08:00:00Z"), "2026-08-10T09:00:00Z");
+  // Within the one-day buffer: parsed, but its events precede the period.
+  await rollout(home, "13", threadUuid(2), thread(threadUuid(2), "2026-08-13T08:00:00Z"), "2026-08-13T20:00:00Z");
+  const current = await rollout(home, "14", threadUuid(3), thread(threadUuid(3), "2026-08-14T08:00:00Z"));
+  await rollout(home, "20", threadUuid(4), thread(threadUuid(4), "2026-08-20T08:00:00Z"), "2026-08-20T09:00:00Z");
+  const period = ["--global", "--json", "--from", "2026-08-14", "--to", "2026-08-14"];
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v10.json");
+  const cacheEntries = async () => Object.keys(JSON.parse(await fs.readFile(cachePath, "utf8")).entries).length;
+  const withoutGenerated = ({ generatedAt, ...stable }) => stable;
+
+  const cold = await runReportResult(home, period);
+  assert.match(cold.stderr, /Cache miss: recalculating 2 of 2 session files \(2 outside the period skipped\)\./);
+  const json = JSON.parse(cold.stdout);
+  assert.equal(json.sessions, 1);
+  assert.equal(json.tokens.total_tokens, 110);
+  assert.equal(await cacheEntries(), 2);
+  const bypass = await runReportResult(home, [...period, "--no-cache"]);
+  assert.match(bypass.stderr, /Cache bypassed: recalculating 2 session files \(2 outside the period skipped\)\./);
+  assert.deepEqual(withoutGenerated(JSON.parse(bypass.stdout)), withoutGenerated(json));
+
+  const full = await runReportResult(home, ["--global", "--json", "--from", "null"]);
+  assert.match(full.stderr, /Cache miss: recalculating 2 of 4 session files\./);
+  assert.equal(JSON.parse(full.stdout).sessions, 4);
+  assert.equal(await cacheEntries(), 4);
+  const hit = await runReportResult(home, period);
+  assert.match(hit.stderr, /Cache hit: using 2 cached session files \(2 outside the period skipped\)\./);
+  assert.deepEqual(withoutGenerated(JSON.parse(hit.stdout)), withoutGenerated(json));
+  await fs.appendFile(current, "\n" + event("2026-08-14T09:00:00Z", "event_msg", { type: "agent_message", message: "reply" }));
+  const changed = await runReportResult(home, period);
+  assert.match(changed.stderr, /Cache miss: recalculating 1 of 2 session files/);
+  assert.equal(JSON.parse(changed.stdout).messages, 2);
+  assert.equal(await cacheEntries(), 4);
+});
+
+test("forks of skipped rollouts still exclude replayed parent history", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const usage = (input, output) => ({ input_tokens: input, output_tokens: output, total_tokens: input + output });
+  const [parent, fork] = [threadUuid(1), threadUuid(2)];
+  const parentEvents = [
+    event("2026-08-01T08:00:00Z", "session_meta", { id: parent, cwd: REPO_ROOT }),
+    event("2026-08-01T08:01:00Z", "turn_context", { turn_id: "parent-turn", model: "gpt-5" }),
+    event("2026-08-01T08:02:00Z", "event_msg", { type: "user_message", message: "first" }),
+    event("2026-08-01T08:03:00Z", "event_msg", { type: "token_count", info: { total_token_usage: usage(100, 10) } }),
+  ];
+  await rollout(home, "01", parent, parentEvents, "2026-08-01T09:00:00Z");
+  // Codex replays the parent history with the fork's timestamp.
+  const replayed = parentEvents.slice(1).map((line) => JSON.stringify({ ...JSON.parse(line), timestamp: "2026-08-14T08:00:00Z" }));
+  await rollout(home, "14", fork, [
+    event("2026-08-14T08:00:00Z", "session_meta", { id: fork, forked_from_id: parent, cwd: REPO_ROOT }),
+    ...replayed,
+    event("2026-08-14T08:01:00Z", "turn_context", { turn_id: "fork-turn", model: "gpt-5" }),
+    event("2026-08-14T08:02:00Z", "event_msg", { type: "user_message", message: "forked" }),
+    event("2026-08-14T08:03:00Z", "event_msg", { type: "token_count", info: { total_token_usage: usage(200, 20) } }),
+  ]);
+  const period = ["--global", "--json", "--from", "2026-08-14", "--to", "2026-08-14"];
+  for (const args of [period, [...period, "--no-cache"], period]) {
+    const { stdout, stderr } = await runReportResult(home, args);
+    assert.match(stderr, /1 outside the period skipped/);
+    const json = JSON.parse(stdout);
+    assert.equal(json.messages, 1);
+    assert.equal(json.tokens.total_tokens, 110);
+    assert.equal(json.models[0].turns, 1);
+  }
+});
+
 test("reports fast mode and every reasoning effort once per turn", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
   t.after(() => fs.rm(home, { recursive: true, force: true }));

@@ -373,6 +373,30 @@ test("reconciles fork copies and subagents before date filtering and on cache hi
   assert.deepEqual(tomorrow.json.tools, []);
 });
 
+test("copies stay with skipped originals from before the period", async (t) => {
+  const home = await homeFor(t);
+  const original = [
+    user("u1", "2026-08-10T08:00:00Z", "hello", { sessionId: "z-parent" }),
+    assistant("a1", "2026-08-10T08:01:00Z", basicUsage, undefined, { sessionId: "z-parent" }),
+  ];
+  const file = await put(home, ".claude/projects/project/z-parent.jsonl", original);
+  await fs.utimes(file, new Date("2026-08-10T09:00:00Z"), new Date("2026-08-10T09:00:00Z"));
+  // Copied history keeps its originating session ID but may carry a newer timestamp.
+  await put(home, ".claude/projects/project/a-fork.jsonl", [
+    ...original.map((record) => ({ ...record, timestamp: "2026-08-14T08:00:00Z" })),
+    user("fork-user", "2026-08-14T09:00:00Z", "new", { sessionId: "a-fork" }),
+    assistant("fork-answer", "2026-08-14T09:01:00Z", basicUsage, undefined, { sessionId: "a-fork" }),
+  ]);
+  const period = ["--global", "--from", "2026-08-14", "--to", "2026-08-14"];
+  const cached = await report(home, period);
+  assert.match(cached.stderr, /1 outside the period skipped/);
+  assert.equal(cached.json.sessions, 1);
+  assert.equal(cached.json.messages, 2);
+  assert.equal(cached.json.tokens.total_tokens, 340);
+  const bypass = await report(home, [...period, "--no-cache"]);
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(cached.json));
+});
+
 test("Claude events use event dates and support exact timestamp windows", async (t) => {
   const home = await homeFor(t);
   await put(home, ".claude/projects/project/parent.jsonl", [

@@ -107,6 +107,13 @@ CLI and a pinned Raycast copy. Cache writes therefore remove only this tool's
 interrupted temporary files after 10 minutes and older cache versions unused
 for 30 days. Current and newer cache versions are never removed automatically.
 
+Reports read only transcripts that can cover the selected period. Transcripts
+only grow, so files last modified more than a day before the period, and Codex
+rollouts created more than a day after it, are skipped. A selected Codex fork
+or copied Claude history still loads the file it references. Skipped files keep
+their cache entries, so a short period starts quickly without a cache and a
+later full-history report parses only the remaining files.
+
 Print only selected sections without the boxed summary:
 
 ```bash
