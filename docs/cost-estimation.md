@@ -79,6 +79,8 @@ official model pages for [Astra](https://developers.openai.com/api/docs/models/g
 | --- | ---: | ---: | ---: |
 | `gpt-6-astra` | $10.00 | $1.00 | $50.00 |
 | `gpt-6.1-sol` | $2.00 | $0.10 | $10.00 |
+| `gpt-6.1-terra` | $1.00 | $0.05 | $5.00 |
+| `gpt-5.6-cyber` | $12.50 | $1.25 | $75.00 |
 | `gpt-6-sol` | $2.00 | $0.20 | $10.00 |
 | `gpt-6-luna` | $0.10 | $0.01 | $0.50 |
 | `gpt-5.6`, `gpt-5.6-sol` | $4.00 | $0.40 | $20.00 |
@@ -95,6 +97,8 @@ official model pages for [Astra](https://developers.openai.com/api/docs/models/g
 
 GPT-6.1 Sol pricing was checked on 2026-09-30 against its
 [official model page](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
+GPT-6.1 Terra and GPT-5.6 Cyber were checked on 2026-10-27 against the
+[OpenAI pricing table](https://developers.openai.com/api/docs/pricing).
 
 The unsuffixed `gpt-5.6` alias uses GPT-5.6 Sol pricing.
 OpenAI lists GPT-5.6 Sol's promotional pricing as available at least through
@@ -144,9 +148,17 @@ Cache writes are included in `input_tokens`, not added on top. This follows
 the [official prompt-caching formula](https://developers.openai.com/api/docs/guides/prompt-caching)
 and [Codex's response-usage mapping](https://github.com/openai/codex/blob/rust-v0.161.0/codex-rs/codex-api/src/sse/responses.rs).
 The report clamps writes to the input remaining after cache reads.
-GPT-6, GPT-6.1 Sol, and GPT-5.6 models use the documented cache-write rate of
-1.25x ordinary input, checked on 2026-10-08. Models without a documented
-cache-write rate retain ordinary input pricing for those tokens.
+GPT-6, GPT-6.1, and GPT-5.6 models use the documented default 30-minute
+cache-write rate of 1.25x ordinary input. OpenAI introduced 12-hour retention
+at 2.5x ordinary input on 2026-10-20. Codex 0.164.0 logs contain the total
+write count but not the API's per-duration breakdown, so the report cannot
+reconstruct which writes used 12-hour retention. Reports with priced OpenAI
+writes explicitly label the 30-minute assumption in terminal output and JSON
+`costAssumptions`; actual 12-hour writes would cost more. Checked on 2026-10-27
+against the official prompt-caching documentation and
+[Codex usage fields](https://github.com/openai/codex/blob/rust-v0.164.0/codex-rs/protocol/src/protocol.rs).
+Models without a documented cache-write rate retain ordinary input pricing
+for those tokens.
 Older logs without `cache_write_input_tokens` count zero writes; the report
 does not infer or reconstruct historical cache writes.
 
@@ -221,7 +233,8 @@ Prices below are USD per million tokens:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Fable/Mythos 5.1 | 10 | 0.25 | 12.50 | 20 | 50 |
 | Opus 5.5 | 4 | 0.20 | 5 | 8 | 20 |
-| Sonnet 5/5.5 | 2 | 0.20 | 2.50 | 4 | 10 |
+| Sonnet 5.5 | 2 | 0.10 | 2.50 | 4 | 10 |
+| Sonnet 5 | 2 | 0.20 | 2.50 | 4 | 10 |
 | Fable/Mythos 5 | 10 | 1 | 12.50 | 20 | 50 |
 | Opus 4.5/4.6/4.7/4.8/5 | 5 | 0.50 | 6.25 | 10 | 25 |
 | Opus 4/4.1 | 15 | 1.50 | 18.75 | 30 | 75 |
@@ -236,3 +249,46 @@ They exclude speed premiums, geography/long-context modifiers, platform-specific
 rates, web-search/server-tool fees, and subscription billing. These remain
 standard Anthropic API-equivalent estimates even when a different API host is
 recorded; no cloud billing data or credentials are read.
+
+### Haiku 5.5 request-length tiers
+
+Haiku 5.5 was checked on 2026-10-27 against the official Anthropic pricing
+table. Requests with at most 100,000 inclusive input tokens use $0.10 input,
+$0.01 cache reads, $0.125 five-minute writes, $0.20 one-hour writes and $0.50
+output per million tokens. Above 100,000 input tokens, the respective rates
+are $0.50, $0.05, $0.625, $1.00 and $2.50 for the entire request.
+
+The adapter selects the tier per request, after including cache reads and
+writes in input and before merging daily/model totals. Output length does not
+affect the threshold. Long-context token subsets preserve that decision through
+deduplication, date filtering, caching and all report breakdowns. The Claude
+cache version is bumped to v5 so old cached records are reparsed.
+
+Sonnet 5.5 cache reads were corrected to $0.10 per million on 2026-10-27;
+Sonnet 5 retains its separate $0.20 rate. The table remains a current-price
+estimate for selected usage, not a reconstruction of historical invoices.
+
+### Compaction usage
+
+When `usage.iterations` is present and non-empty, its entries are authoritative.
+They include compaction, regular sampling and advisor calls; the top-level
+input/output fields repeat executor usage and must not be added again. Each
+iteration is normalized and priced at its own prompt-length tier. Thinking sub-counts from
+the top level are retained without billing them separately.
+
+This follows Anthropic's [compaction usage documentation](https://platform.claude.com/docs/en/build-with-claude/compaction-threshold).
+Old Claude records are reparsed using cache v5 so compaction costs and tiers
+are available on cache hits as well.
+
+### Advisor model attribution
+
+Advisor iterations (`type: "advisor_message"`) use their own `model` for pricing
+and token breakdowns. Missing or unknown advisor models remain unpriced; they
+never inherit the executor's rates. Each iteration uses its own inclusive prompt
+length for Haiku 5.5 tier selection. Advisor calls add tokens and cost without
+adding chat messages or turns.
+
+The per-model breakdown stays with the chosen usage snapshot during split-message
+and fork reconciliation. Claude cache v5 reparses older cached records so this
+attribution is preserved on cache hits. See Anthropic's
+[advisor usage and billing documentation](https://platform.claude.com/docs/en/agents-and-tools/tool-use/advisor-tool#usage-and-billing).

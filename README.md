@@ -102,6 +102,18 @@ Delete all Codex Report session caches for both agents and exit:
 codex-report --clear-cache
 ```
 
+Cache directories may be shared by several installed versions, such as an npx
+CLI and a pinned Raycast copy. Cache writes therefore remove only this tool's
+interrupted temporary files after 10 minutes and older cache versions unused
+for 30 days. Current and newer cache versions are never removed automatically.
+
+Reports read only transcripts that can cover the selected period. Transcripts
+only grow, so files last modified more than a day before the period, and Codex
+rollouts created more than a day after it, are skipped. A selected Codex fork
+or copied Claude history still loads the file it references. Skipped files keep
+their cache entries, so a short period starts quickly without a cache and a
+later full-history report parses only the remaining files.
+
 Print only selected sections without the boxed summary:
 
 ```bash
@@ -158,8 +170,8 @@ Data locations:
 
 | Agent | Transcripts | Override | Report cache |
 | --- | --- | --- | --- |
-| Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v9.json` |
-| Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v1.json` |
+| Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v10.json` |
+| Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v5.json` |
 
 Claude Desktop chat, Cowork, and remote history are not included. Reports only
 cover transcript files still present locally; they cannot recover deleted history.
@@ -170,6 +182,8 @@ Claude Code counting rules:
   API-error replies are excluded from message counts.
 - Split assistant content blocks count as one assistant response/model request.
   Whole-request usage snapshots replace earlier snapshots rather than being added.
+- Like Codex agent messages, assistant messages count only responses with visible
+  text. Tool-only and thinking-only responses add tokens and cost, not messages.
 - Request/message identities remove copied fork history and duplicate parent/subagent
   usage. Unique tool IDs are counted once, retaining their recorded call timestamps.
   Without recorded identities, separate transcript rows are treated as separate work.
@@ -179,15 +193,19 @@ Claude Code counting rules:
 - Each response's tokens and assistant message are attributed to its final meaningful
   usage snapshot; user messages and tool calls use their own timestamps. Timestamp
   filters run after deduplication, including when cached records are reused.
-- Codex model counts represent recorded turns; Claude counts represent distinct
-  assistant API responses. These are different units of work, not comparable human prompts.
+- Model, reasoning-effort, and Fast-mode counts use turns for both agents. Codex
+  counts `turn_context` records; a Claude turn is a prompt that received a response,
+  using the first response's model and settings. Tool loops, split responses, and
+  advisor calls add tokens and cost, not turns. Each answered subagent task counts
+  as one turn, as Codex counts turns in spawned subagent threads. Tracking ignores
+  date filters, so a response in range still starts a turn whose prompt is not.
 - Input tokens include uncached input, cache reads, and cache writes for both the
   totals and estimated costs. Output thinking tokens are already part of output.
 - Skills use actual `Read`/`Bash` reads, explicit `Skill` tool calls, and user skill
   mentions matched against the selected agents' skill registries. This is best-effort
   evidence, not a complete execution ledger.
 - Insights use recorded Claude effort and `usage.speed` settings when available.
-  Fast-mode percentages include only responses/turns with known settings. Missing
+  Fast-mode percentages include only turns with known settings. Missing
   settings display as unavailable, and JSON exposes the eligible counts.
 
 `--json` emits one JSON object on stdout, with diagnostics on stderr. Schema
@@ -302,6 +320,9 @@ $ codex-report --global
   that span multiple days. Messages are counted from legacy `user_message` /
   `agent_message` events and `item_completed` user/agent messages; response-item
   copies are not counted again.
+- Subagent threads contribute to their root session and project, as Claude
+  subagents do. Automatic Guardian approval reviews add tokens and cost but no
+  messages, turns, or tool calls. User-created forks remain separate sessions.
 - Parsed daily session summaries are cached once per source file under
   `~/.codex/cache` by default. A source JSONL size or modification-time change
   invalidates its entry; date ranges and the current skill registry are applied

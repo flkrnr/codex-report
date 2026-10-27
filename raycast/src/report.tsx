@@ -16,6 +16,7 @@ function dashboardMarkdown(report: Report | undefined, title: string, metric: Me
     `## ${title}\n${compact(report.messages)} Messages · ${compact(report.tokens.total_tokens)} Tokens · ${report.sessions} Sessions`,
     report.sessions === 0 ? "No activity in this period yet." : barChart(`Activity · ${unit}`, activityBars(dates, report, metric, groupWeeks), legend),
     metric === "costs" ? "Estimated API costs · unpriced usage excluded; partial totals are marked." : "",
+    metric === "costs" ? (report.costAssumptions ?? []).join("\n\n") : "",
     error ? "Refresh failed. Showing the last successful report." : "",
   ].join("\n\n");
 }
