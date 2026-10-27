@@ -8,6 +8,10 @@ The extension reads the session logs that Codex (`~/.codex`) and Claude Code
 sends nothing over the network. Git groups sessions by repository in
 **Show Projects**.
 
+Raycast does not load your shell profile, so `CODEX_HOME` or
+`CLAUDE_CONFIG_DIR` set there are not applied; the extension reads the
+default `~/.codex` and `~/.claude` folders.
+
 Search Raycast for **Show Codex Report** or **Show Activity Heatmap**.
 
 ## Dashboard
