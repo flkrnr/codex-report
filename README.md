@@ -42,6 +42,10 @@ npm package. It bundles a copy of the CLI and runs it with Raycast's own Node
 runtime, so users need neither Node.js nor the npm package; Git is used to group
 projects by repository.
 
+![Weekly report in Raycast with stacked Codex and Claude activity and estimated API costs](raycast/metadata/codex-report-1-weekly-report.png)
+
+![Six-month activity heatmap in Raycast colored by the dominant agent](raycast/metadata/codex-report-2-activity-heatmap.png)
+
 Install from a source checkout (development requires Node.js >= 22.22.2):
 
 ```bash
