@@ -162,6 +162,29 @@ async function runReportResult(home, args) {
   });
 }
 
+test("regroups cached Codex days after a time-zone change", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const dir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "late.jsonl"), [
+    event("2026-10-01T23:30:00Z", "session_meta", { id: "late", cwd: "/tmp/late" }),
+    event("2026-10-01T23:30:00Z", "turn_context", { model: "gpt-6.1-sol", turn_id: "late-turn" }),
+    event("2026-10-01T23:30:00Z", "event_msg", { type: "user_message", message: "late" }),
+  ].join("\n") + "\n");
+  const days = async (timeZone) => {
+    const { stdout, stderr } = await execFileAsync(process.execPath, [CLI_PATH, "--global", "--json", "--from", "null"], {
+      cwd: REPO_ROOT,
+      env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", TZ: timeZone },
+    });
+    return { dates: JSON.parse(stdout).days.map((day) => day.date), stderr };
+  };
+  assert.deepEqual((await days("UTC")).dates, ["2026-10-01"]);
+  const moved = await days("Pacific/Kiritimati");
+  assert.match(moved.stderr, /Cache miss/);
+  assert.deepEqual(moved.dates, ["2026-10-02"]);
+});
+
 test("clears every Codex Report session cache and leaves unrelated files", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
   t.after(() => fs.rm(home, { recursive: true, force: true }));

@@ -330,8 +330,8 @@ $ codex-report --global
   subagents do. Automatic Guardian approval reviews add tokens and cost but no
   messages, turns, or tool calls. User-created forks remain separate sessions.
 - Parsed daily session summaries are cached once per source file under
-  `~/.codex/cache` by default. A source JSONL size or modification-time change
-  invalidates its entry; date ranges and the current skill registry are applied
+  `~/.codex/cache` by default. A source JSONL size or modification-time change,
+  or a different local time zone, invalidates its entry; date ranges and the current skill registry are applied
   after loading the cache.
 - Token totals are based on Codex `token_count` events in local session logs.
 - Fast Mode and reasoning-effort insights are locally derived from
