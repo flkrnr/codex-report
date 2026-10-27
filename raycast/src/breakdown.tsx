@@ -69,7 +69,7 @@ export function Breakdown({ kind, report, period }: { kind: Kind; report: Report
     <List.EmptyView title="No Data for This Period" description="Go back and choose another period." icon={Icon.BarChart} />
     <List.Section title={period} subtitle={kind === "costs" ? `${money(report.costEstimate.totalCost)}${report.costEstimate.unpricedModels.length ? " · partial estimate" : " estimated"}` : `${rows.length} ${kind}`}>
       {rows.map((row) => <List.Item key={`${row.name}-${row.detail}`} title={row.name} icon={kind === "costs" ? Icon.Coins : kind === "efforts" ? Icon.LightBulb : kind === "projects" ? Icon.Folder : Icon.Layers} accessories={[{ text: row.value, tooltip: row.detail }]}
-        detail={<List.Item.Detail markdown={`## ${row.name}\n\n${note}`} metadata={<List.Item.Detail.Metadata>
+        detail={<List.Item.Detail markdown={[`## ${row.name}`, note, kind === "costs" ? (report.costAssumptions ?? []).join("\n\n") : ""].join("\n\n")} metadata={<List.Item.Detail.Metadata>
           {row.fields.map(([title, value]) => <List.Item.Detail.Metadata.Label key={title} title={title} text={value} />)}
         </List.Item.Detail.Metadata>} />}
         actions={<ActionPanel>

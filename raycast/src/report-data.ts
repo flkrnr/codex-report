@@ -34,6 +34,7 @@ export type Report = {
     modelCosts: { model: string; canonicalModel: string; tokens: TokenUsage; cost: number }[];
     unpricedModels: { model: string; tokens: TokenUsage }[];
   };
+  costAssumptions?: string[];
 };
 export const money = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 export const count = (value: number) => value.toLocaleString("en-US");
