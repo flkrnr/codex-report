@@ -21,7 +21,7 @@ Requires Node.js 22.15.0 or newer; there are no other dependencies.
 ```bash
 codex-report                                  # current folder, all available history
 codex-report --global                         # all local sessions
-codex-report --from 2026-04-01 --to 2026-04-28
+codex-report --from 2026-10-01 --to 2026-10-27
 codex-report --top 5                          # shorter top lists
 ```
 
@@ -58,37 +58,48 @@ unpriced. See [Cost Estimation](docs/cost-estimation.md) for the calculation.
 ## Example output
 
 ```text
-$ codex-report --global
+$ codex-report --global --agent all --from 2026-09-01
 
 ┌─ codex-report ───────────────────────────────────────────────────────────────────────┐
+│ Agents      codex, claude                                                            │
 │ Scope       global                                                                   │
-│ Period      2025-09-19 → 2026-08-15                                                  │
-│ Sessions    1,026                                                                    │
-│ Projects    89                                                                       │
-│ Repos/dirs  50                                                                       │
-│ Messages    85,651 (19,598 user, 66,053 assistant)                                   │
-│ Tokens      16,080,902,795 total                                                     │
-│             16,030,807,609 input · 15,051,904,000 cached · 50,095,186 output         │
-│ API cost    $10,636 estimated from priced local tokens                               │
-│             265M tokens in unpriced models                                           │
-│ Active days 202 · longest streak 28 days                                             │
-│ Busiest day 2026-06-23 (2,796 messages)                                              │
+│ Period      2026-09-01 → 2026-10-27                                                  │
+│ Sessions    202                                                                      │
+│ Projects    74                                                                       │
+│ Repos/dirs  34                                                                       │
+│ Messages    19,923 (6,211 user, 13,712 assistant)                                    │
+│ Tokens      10,585,305,226 total                                                     │
+│             10,561,795,614 input · 10,298,574,775 cached · 23,509,612 output         │
+│ API cost    $6,559.64 estimated from priced local tokens                             │
+│             654M tokens in unpriced models                                           │
+│ Active days 50 · longest streak 17 days                                              │
+│ Busiest day 2026-10-07 (688M tokens)                                                 │
+│                                                                                      │
+│ Agents                                                                               │
+│                                                                                      │
+│ codex  131 sessions · 13,632 messages · 5.9B tokens · $4,985.01 estimated API cost   │
+│ claude  71 sessions · 6,291 messages · 4.7B tokens · $1,574.64 estimated API cost    │
 │                                                                                      │
 │ Top repositories and directories                                                     │
-│   github.com/acme/client                         837 sessions  █████████████░░░  82% │
-│   github.com/acme/backend                         90 sessions  █░░░░░░░░░░░░░░░   9% │
-│   ~/code/local-tool                               22 sessions  █░░░░░░░░░░░░░░░   2% │
+│   github.com/acme/platform                        91 sessions  ███████░░░░░░░░░  45% │
+│   github.com/acme/client                          51 sessions  ████░░░░░░░░░░░░  25% │
+│   github.com/acme/backend                         12 sessions  █░░░░░░░░░░░░░░░   6% │
+│   Other (31)                                      48 sessions  ████░░░░░░░░░░░░  24% │
 │                                                                                      │
 │ Top models                                                                           │
-│   gpt-5.2-codex                                   6,689 turns  ███░░░░░░░░░░░░░  20% │
-│   gpt-5.5                                         5,918 turns  ███░░░░░░░░░░░░░  18% │
-│   gpt-5.4                                         4,753 turns  ██░░░░░░░░░░░░░░  14% │
+│   gpt-6-astra                                     2,514 turns  ███████░░░░░░░░░  44% │
+│   claude-opus-5-5                                 1,730 turns  █████░░░░░░░░░░░  30% │
+│   gpt-5.6-sol                                       820 turns  ██░░░░░░░░░░░░░░  14% │
+│   Other (7)                                         624 turns  ██░░░░░░░░░░░░░░  11% │
 │                                                                                      │
 │ Estimated API cost by model                                                          │
-│   gpt-5.5                            $5,019  5.9B in · 5.6B cached · 15M out     47% │
-│   gpt-5.6-sol                        $3,129  4.4B in · 4.2B cached · 10M out     29% │
-│   gpt-5.4                            $1,990  3.9B in · 3.5B cached · 15M out     19% │
-│   unpriced: (unknown), codex-auto-review, gpt-5.3-codex-spark                        │
+│   gpt-6-astra                     $4,092.57  3.1B in · 3.1B cached · 6.0M out    62% │
+│   claude-opus-5-5                 $1,558.72  4.7B in · 4.6B cached ·  11M out    24% │
+│   gpt-5.6-sol                       $765.87  1.4B in · 1.3B cached · 3.7M out    12% │
+│   Other (7)                         $142.49  730M in · 709M cached · 2.0M out     2% │
+│   estimated: gpt-reserve ≈ gpt-5.6-luna                                              │
+│   unpriced: codex-auto-review (485M tokens)                                          │
+│   unpriced: (unknown) (169M tokens)                                                  │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
