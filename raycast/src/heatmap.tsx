@@ -45,6 +45,9 @@ ${range.from} — ${range.to}`,
         ? "Could not load activity. Press ⌘R to retry."
         : "Reading local sessions…",
     `${activeDays} active days · ${formatValue(total)} ${metrics[metric].toLowerCase()}`,
+    report?.sessions === 0
+      ? "No local sessions found. Codex Report reads Codex sessions from `~/.codex` and Claude Code sessions from `~/.claude`."
+      : "",
     loading && report ? "Updating local sessions… Showing the last successful report." : "",
     viewNote,
     note,
