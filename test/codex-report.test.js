@@ -80,6 +80,9 @@ test("cache-write deltas exclude the date-range baseline and are billed only onc
   const output = await runReport(home, args);
   assert.match(output, /Total estimated API cost: \$3\.35/);
   assert.match(output, /cache writes: 500K tokens included in input/);
+  assert.match(output, /assume 30-minute retention.*12-hour writes/);
+  const json = JSON.parse(await runReport(home, [...args, "--json"]));
+  assert.ok(json.costAssumptions.some((note) => /assume 30-minute retention.*12-hour writes/.test(note)));
   assert.equal(await runReport(home, args), output);
   assert.equal(await runReport(home, [...args, "--no-cache"]), output);
 });

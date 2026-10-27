@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { estimateCosts, modelPrice } from "../lib/pricing.js";
+import { costEstimateNotes, estimateCosts, modelPrice } from "../lib/pricing.js";
+import { emptyTokens } from "../lib/session.js";
 
 test("prices Terra, Cyber and Sonnet 5.5 with separate cache read and write rates", () => {
   const estimate = estimateCosts(new Map([
@@ -15,4 +16,12 @@ test("prices Terra, Cyber and Sonnet 5.5 with separate cache read and write rate
   assert.deepEqual(estimate.unpricedModels, []);
   assert.equal(modelPrice("claude-sonnet-5-20260801").cachedInput, 0.2);
   assert.equal(modelPrice("claude-sonnet-5-5-20260928[1m]").cachedInput, 0.1);
+});
+
+test("labels the unknown OpenAI cache retention without changing token accounting", () => {
+  const notes = (model, tokens) => costEstimateNotes(estimateCosts(new Map([[model, { ...emptyTokens(), ...tokens }]])));
+  assert.match(notes("gpt-6.1-sol", { input_tokens: 1_000, cache_write_input_tokens: 500 }).join("\n"), /assume 30-minute retention.*12-hour writes/);
+  assert.deepEqual(notes("gpt-6.1-sol", { input_tokens: 1_000 }), []);
+  assert.deepEqual(notes("claude-sonnet-5-5", { input_tokens: 1_000, cache_creation_input_tokens: 500 }), []);
+  assert.deepEqual(notes("unknown", { input_tokens: 1_000, cache_write_input_tokens: 500 }), []);
 });

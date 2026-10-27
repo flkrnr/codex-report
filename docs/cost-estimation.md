@@ -148,9 +148,17 @@ Cache writes are included in `input_tokens`, not added on top. This follows
 the [official prompt-caching formula](https://developers.openai.com/api/docs/guides/prompt-caching)
 and [Codex's response-usage mapping](https://github.com/openai/codex/blob/rust-v0.161.0/codex-rs/codex-api/src/sse/responses.rs).
 The report clamps writes to the input remaining after cache reads.
-GPT-6, GPT-6.1 Sol, and GPT-5.6 models use the documented cache-write rate of
-1.25x ordinary input, checked on 2026-10-08. Models without a documented
-cache-write rate retain ordinary input pricing for those tokens.
+GPT-6, GPT-6.1, and GPT-5.6 models use the documented default 30-minute
+cache-write rate of 1.25x ordinary input. OpenAI introduced 12-hour retention
+at 2.5x ordinary input on 2026-10-20. Codex 0.164.0 logs contain the total
+write count but not the API's per-duration breakdown, so the report cannot
+reconstruct which writes used 12-hour retention. Reports with priced OpenAI
+writes explicitly label the 30-minute assumption in terminal output and JSON
+`costAssumptions`; actual 12-hour writes would cost more. Checked on 2026-10-27
+against the official prompt-caching documentation and
+[Codex usage fields](https://github.com/openai/codex/blob/rust-v0.164.0/codex-rs/protocol/src/protocol.rs).
+Models without a documented cache-write rate retain ordinary input pricing
+for those tokens.
 Older logs without `cache_write_input_tokens` count zero writes; the report
 does not infer or reconstruct historical cache writes.
 
