@@ -79,6 +79,8 @@ official model pages for [Astra](https://developers.openai.com/api/docs/models/g
 | --- | ---: | ---: | ---: |
 | `gpt-6-astra` | $10.00 | $1.00 | $50.00 |
 | `gpt-6.1-sol` | $2.00 | $0.10 | $10.00 |
+| `gpt-6.1-terra` | $1.00 | $0.05 | $5.00 |
+| `gpt-5.6-cyber` | $12.50 | $1.25 | $75.00 |
 | `gpt-6-sol` | $2.00 | $0.20 | $10.00 |
 | `gpt-6-luna` | $0.10 | $0.01 | $0.50 |
 | `gpt-5.6`, `gpt-5.6-sol` | $4.00 | $0.40 | $20.00 |
@@ -95,6 +97,8 @@ official model pages for [Astra](https://developers.openai.com/api/docs/models/g
 
 GPT-6.1 Sol pricing was checked on 2026-09-30 against its
 [official model page](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
+GPT-6.1 Terra and GPT-5.6 Cyber were checked on 2026-10-27 against the
+[OpenAI pricing table](https://developers.openai.com/api/docs/pricing).
 
 The unsuffixed `gpt-5.6` alias uses GPT-5.6 Sol pricing.
 OpenAI lists GPT-5.6 Sol's promotional pricing as available at least through
@@ -221,7 +225,8 @@ Prices below are USD per million tokens:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Fable/Mythos 5.1 | 10 | 0.25 | 12.50 | 20 | 50 |
 | Opus 5.5 | 4 | 0.20 | 5 | 8 | 20 |
-| Sonnet 5/5.5 | 2 | 0.20 | 2.50 | 4 | 10 |
+| Sonnet 5.5 | 2 | 0.10 | 2.50 | 4 | 10 |
+| Sonnet 5 | 2 | 0.20 | 2.50 | 4 | 10 |
 | Fable/Mythos 5 | 10 | 1 | 12.50 | 20 | 50 |
 | Opus 4.5/4.6/4.7/4.8/5 | 5 | 0.50 | 6.25 | 10 | 25 |
 | Opus 4/4.1 | 15 | 1.50 | 18.75 | 30 | 75 |
