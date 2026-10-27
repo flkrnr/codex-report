@@ -10,6 +10,7 @@
     "../src/heatmap-chart.ts",
     "../src/svg.ts",
     "../src/report-cache.ts",
-    "../src/cli-error.ts"
+    "../src/cli-error.ts",
+    "../src/serial.ts"
   ]
 }

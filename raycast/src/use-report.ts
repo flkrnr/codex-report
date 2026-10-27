@@ -5,8 +5,26 @@ import { useEffect, useRef, useState } from "react";
 import { cliErrorMessage } from "./cli-error";
 import { createReportCache } from "./report-cache";
 import { AgentSelection, Report } from "./report-data";
+import { serial } from "./serial";
 
 const snapshots = createReportCache(new Cache({ namespace: "reports-v1" }));
+// One CLI run at a time: a cold scan takes about a minute, and killing it on every switch would discard the cache it builds.
+const enqueue = serial();
+
+/** Runs the bundled CLI on Raycast's own Node runtime, so it needs no separate installation. */
+function runCli(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      process.execPath,
+      [join(environment.assetsPath, "codex-report.mjs"), ...args],
+      { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 },
+      (failure, stdout, stderr) => {
+        if (!failure) resolve(stdout);
+        else reject(new Error(failure.killed ? "Report timed out. Please try again." : cliErrorMessage(stderr)));
+      },
+    );
+  });
+}
 
 type ReportState = { key: string; report?: Report; loading: boolean; error?: string };
 
@@ -30,46 +48,39 @@ export function useReport(
     }
     let cancelled = false;
     setState((current) => ({ key, report: current.key === key ? current.report : snapshots.read(key), loading: true }));
-    // Raycast runs extensions on its own Node runtime, so the bundled CLI needs no separate installation.
-    const child = execFile(
-      process.execPath,
-      [
-        join(environment.assetsPath, "codex-report.mjs"),
-        "--agent",
-        agent,
-        "--global",
-        "--json",
-        `--${section}`,
-        "--from",
-        from,
-        ...(to ? ["--to", to] : []),
-      ],
-      { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 },
-      (failure, stdout, stderr) => {
+    void enqueue(async () => {
+      // Reports superseded while waiting never start; a running one finishes, so its result and cache are kept.
+      if (cancelled) return;
+      try {
+        const args = [
+          "--agent",
+          agent,
+          "--global",
+          "--json",
+          `--${section}`,
+          "--from",
+          from,
+          ...(to ? ["--to", to] : []),
+        ];
+        const report = JSON.parse(await runCli(args)) as Report;
+        if (report.schemaVersion !== 1) throw new Error("Unsupported report format");
+        snapshots.write(key, report);
+        reports.current.set(key, report);
+        if (!cancelled) setState({ key, report, loading: false });
+      } catch (reason) {
         if (cancelled) return;
-        try {
-          if (failure)
-            throw new Error(failure.killed ? "Report timed out. Please try again." : cliErrorMessage(stderr));
-          const report = JSON.parse(stdout) as Report;
-          if (report.schemaVersion !== 1) throw new Error("Unsupported report format");
-          snapshots.write(key, report);
-          reports.current.set(key, report);
-          setState({ key, report, loading: false });
-        } catch (reason) {
-          const error = reason instanceof Error ? reason.message : String(reason);
-          setState((current) => ({
-            key,
-            report: current.key === key ? current.report : undefined,
-            loading: false,
-            error,
-          }));
-          void showToast({ style: Toast.Style.Failure, title: "Could Not Load Report", message: error });
-        }
-      },
-    );
+        const error = reason instanceof Error ? reason.message : String(reason);
+        setState((current) => ({
+          key,
+          report: current.key === key ? current.report : undefined,
+          loading: false,
+          error,
+        }));
+        void showToast({ style: Toast.Style.Failure, title: "Could Not Load Report", message: error });
+      }
+    });
     return () => {
       cancelled = true;
-      child.kill();
     };
   }, [from, to, agent, section, key, revision]);
 
