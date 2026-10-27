@@ -1,8 +1,8 @@
-import { Action, ActionPanel, Detail, Icon, environment } from "@raycast/api";
+import { Action, ActionPanel, Detail, Icon, environment, Keyboard } from "@raycast/api";
 import { useState } from "react";
 import { compact } from "./charts";
 import { imageMarkdown } from "./svg";
-import { AgentSelection, Metric, agentLabels, metrics, money } from "./report-data";
+import { AgentSelection, Metric, agentColors, agentLabels, metrics, money } from "./report-data";
 import { useReport } from "./use-report";
 import { HeatmapPeriod, HeatmapView, buildHeatmap, heatmapRange } from "./heatmap-data";
 import { heatmapImage } from "./heatmap-chart";
@@ -55,10 +55,11 @@ ${range.from} — ${range.to}`,
     setPeriod(value);
     setOffset(0);
   }
+  // Store guidelines keep the root command title; only the dashboard's pushed heatmap gets its own.
   return (
     <Detail
       isLoading={loading}
-      navigationTitle="Activity Heatmap"
+      navigationTitle={environment.entryPointName === "heatmap" ? undefined : "Activity Heatmap"}
       markdown={markdown}
       actions={
         <ActionPanel>
@@ -72,7 +73,7 @@ ${range.from} — ${range.to}`,
           <Action
             title="Refresh"
             icon={Icon.ArrowClockwise}
-            shortcut={{ modifiers: ["cmd"], key: "r" }}
+            shortcut={Keyboard.Shortcut.Common.Refresh}
             onAction={refresh}
           />
           <ActionPanel.Section title="Agents">
@@ -80,6 +81,10 @@ ${range.from} — ${range.to}`,
               <Action
                 key={value}
                 title={`Show ${agentLabels[value]}`}
+                icon={{
+                  source: value === agent ? Icon.CheckCircle : Icon.Circle,
+                  tintColor: value === "all" ? undefined : agentColors[value],
+                }}
                 shortcut={{ modifiers: ["cmd"], key: String(index + 4) as "4" | "5" | "6" }}
                 onAction={() => setAgent(value)}
               />
@@ -88,6 +93,7 @@ ${range.from} — ${range.to}`,
           <ActionPanel.Section title="View">
             <Action
               title={`Switch to ${view === "daily" ? "Weekly" : "Daily"}`}
+              icon={Icon.AppWindowGrid3x3}
               shortcut={{ modifiers: ["cmd"], key: "3" }}
               onAction={() => setView((value) => (value === "daily" ? "weekly" : "daily"))}
             />
@@ -95,24 +101,26 @@ ${range.from} — ${range.to}`,
           <ActionPanel.Section title="Window">
             <Action
               title="Show 6 Months"
-              icon={Icon.Calendar}
+              icon={period === "sixMonths" && offset === 0 ? Icon.CheckCircle : Icon.Calendar}
               shortcut={{ modifiers: ["cmd"], key: "1" }}
               onAction={() => changePeriod("sixMonths")}
             />
             <Action
               title="Show Current Year"
-              icon={Icon.Calendar}
+              icon={period === "year" && offset === 0 ? Icon.CheckCircle : Icon.Calendar}
               shortcut={{ modifiers: ["cmd"], key: "2" }}
               onAction={() => changePeriod("year")}
             />
             <Action
               title="Previous Window"
+              icon={Icon.ArrowLeft}
               shortcut={{ modifiers: ["cmd"], key: "arrowLeft" }}
               onAction={() => setOffset((value) => value - 1)}
             />
             {offset < 0 && (
               <Action
                 title="Next Window"
+                icon={Icon.ArrowRight}
                 shortcut={{ modifiers: ["cmd"], key: "arrowRight" }}
                 onAction={() => setOffset((value) => value + 1)}
               />
@@ -120,7 +128,12 @@ ${range.from} — ${range.to}`,
           </ActionPanel.Section>
           <ActionPanel.Section title="Metric">
             {(Object.keys(metrics) as Metric[]).map((value) => (
-              <Action key={value} title={`Show ${metrics[value]}`} onAction={() => setMetric(value)} />
+              <Action
+                key={value}
+                title={`Show ${metrics[value]}`}
+                icon={metric === value ? Icon.CheckCircle : Icon.BarChart}
+                onAction={() => setMetric(value)}
+              />
             ))}
           </ActionPanel.Section>
           {image && report && (

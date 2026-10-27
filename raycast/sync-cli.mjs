@@ -1,3 +1,4 @@
+// Copies the CLI from the codex-report repository into assets; the Store build only sees this folder.
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 const assets = new URL("assets/", import.meta.url);
 mkdirSync(assets, { recursive: true });
@@ -7,4 +8,3 @@ const library = new URL("lib/", assets);
 rmSync(library, { recursive: true, force: true });
 cpSync(new URL("../lib/", import.meta.url), library, { recursive: true });
 writeFileSync(new URL("package.json", library), JSON.stringify({ type: "module" }));
-writeFileSync(new URL("src/local.json", import.meta.url), JSON.stringify({ node: process.execPath }));

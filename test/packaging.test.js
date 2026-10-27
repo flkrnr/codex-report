@@ -24,15 +24,15 @@ test("npm package includes every module required by the CLI", async (t) => {
   }
 });
 
-test("prepared Raycast CLI runs in isolation with both adapters and JSON schema 1", async (t) => {
+test("synced Raycast CLI runs in isolation with both adapters and JSON schema 1", async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-packaging-"));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   await fs.cp(path.join(ROOT, "bin"), path.join(directory, "bin"), { recursive: true });
   await fs.cp(path.join(ROOT, "lib"), path.join(directory, "lib"), { recursive: true });
   const raycast = path.join(directory, "raycast");
-  await fs.mkdir(path.join(raycast, "src"), { recursive: true });
-  await fs.copyFile(path.join(ROOT, "raycast", "prepare.mjs"), path.join(raycast, "prepare.mjs"));
-  await exec(process.execPath, [path.join(raycast, "prepare.mjs")]);
+  await fs.mkdir(raycast);
+  await fs.copyFile(path.join(ROOT, "raycast", "sync-cli.mjs"), path.join(raycast, "sync-cli.mjs"));
+  await exec(process.execPath, [path.join(raycast, "sync-cli.mjs")]);
   // Removing the originals ensures imports resolve only within the prepared assets.
   await fs.rm(path.join(directory, "lib"), { recursive: true });
   await fs.rm(path.join(directory, "bin"), { recursive: true });

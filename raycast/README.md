@@ -1,18 +1,14 @@
-# Codex Report for Raycast (local MVP)
+# Codex Report
 
-Requirements: macOS, Raycast, and Node.js >= 22.15.0.
+Usage history, an activity heatmap, and estimated API costs from your local
+Codex and Claude Code sessions.
 
-From the `raycast` directory:
+The extension reads the session logs that Codex (`~/.codex`) and Claude Code
+(`~/.claude`) already write on your Mac. It needs no account or API key and
+sends nothing over the network. Git groups sessions by repository in
+**Show Projects**.
 
-```sh
-npm install
-npm run dev
-```
-
-Open Raycast and search for **Show Codex Report**. `ray develop` imports the
-extension locally and reloads changes automatically. After stopping development
-with Ctrl+C, the last built command remains available in Raycast. No Store
-publication is required.
+Search Raycast for **Show Codex Report** or **Show Activity Heatmap**.
 
 ## Dashboard
 
@@ -93,14 +89,12 @@ with exact totals and each agent's recorded usage. Cost views flag partial
 estimates and exclude unpriced usage. Export as PNG includes the selected view
 and its legend.
 
-## Local development
+## Data and caching
 
-`prepare.mjs` copies the existing CLI into the extension assets and records the
-local Node executable path. Restart `npm run dev` after changing Node versions
-or modifying the CLI.
-
-The extension reuses the CLI parser and cache in `~/.codex/cache` and `~/.claude/cache`; it does not
-run a separate server. A cold scan can take longer, just as it does in the CLI.
+The extension bundles the [codex-report](https://github.com/flkrnr/codex-report)
+CLI and runs it with Raycast's Node runtime; it does not run a separate server.
+Parsed sessions are cached in `~/.codex/cache` and `~/.claude/cache`, shared with
+the CLI. A cold scan of a long history can take a while, just as it does in the CLI.
 A bounded Raycast cache keeps successful reports across command openings.
 Previously loaded periods display immediately while a fresh report loads in the
 background; the heatmap marks this state. A new period still needs an initial
@@ -108,15 +102,27 @@ scan. Refresh clears saved reports for every window and agent.
 During refresh, the previous report stays visible. If refresh fails, that report
 is explicitly marked as the last successful result.
 
-Validate the extension with:
-
-```sh
-npm run build
-npm run typecheck
-npm test
-```
-
 Category costs reuse cached model-token totals without changing the cache format.
 Unknown prices are shown as **Unpriced**; mixed priced/unpriced usage is marked
 **partial**. Cost sorting places entirely unpriced entries last. Activity cost bars
 and PNG exports use the same estimates.
+
+## Development
+
+The bundled CLI in `assets` is a copy of the codex-report repository's `bin` and
+`lib`. After changing the CLI there, run `npm run sync-cli`; `npm test` fails
+while the copy is out of date.
+
+```sh
+npm install
+npm run dev
+```
+
+Validate the extension with:
+
+```sh
+npm run build
+npm run lint
+npm run typecheck
+npm test
+```

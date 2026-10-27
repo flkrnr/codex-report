@@ -46,7 +46,6 @@ export default function Command() {
   return (
     <Detail
       isLoading={loading}
-      navigationTitle={`Codex Report · ${title}`}
       markdown={dashboardMarkdown(report, title, metric, dates, period === "month", error)}
       metadata={<ReportMetadata report={report} agent={agent} onSelect={setAgent} />}
       actions={

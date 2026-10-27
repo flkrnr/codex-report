@@ -2,7 +2,6 @@ import { Cache, Toast, environment, showToast } from "@raycast/api";
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { useEffect, useRef, useState } from "react";
-import local from "./local.json";
 import { createReportCache } from "./report-cache";
 import { AgentSelection, Report } from "./report-data";
 
@@ -30,8 +29,9 @@ export function useReport(
     }
     let cancelled = false;
     setState((current) => ({ key, report: current.key === key ? current.report : snapshots.read(key), loading: true }));
+    // Raycast runs extensions on its own Node runtime, so the bundled CLI needs no separate installation.
     const child = execFile(
-      local.node,
+      process.execPath,
       [
         join(environment.assetsPath, "codex-report.mjs"),
         "--agent",

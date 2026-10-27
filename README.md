@@ -34,13 +34,15 @@ Remove the global install:
 npm uninstall -g codex-report
 ```
 
-## Raycast support (local MVP)
+## Raycast extension
 
-An experimental Raycast extension is included for local installation and testing
-on macOS. It is **not available in the Raycast Store** and is not included in the
-npm package. It requires Raycast, Git, and Node.js >= 22.15.0.
+A Raycast extension for macOS lives in [`raycast`](raycast). It is prepared for
+the Raycast Store but **not published there yet**, and it is not included in the
+npm package. It bundles a copy of the CLI and runs it with Raycast's own Node
+runtime, so users need neither Node.js nor the npm package; Git is used to group
+projects by repository.
 
-Install from a source checkout:
+Install from a source checkout (development requires Node.js >= 22.22.2):
 
 ```bash
 git clone https://github.com/flkrnr/codex-report.git
