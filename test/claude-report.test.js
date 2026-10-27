@@ -335,6 +335,40 @@ test("custom homes, missing agents and unknown models remain reportable", async 
   assert.match(absent.stderr, /No local Claude Code transcripts/);
 });
 
+test("reordered and rewritten Claude transcripts do not retain removed activity", async (t) => {
+  const home = await homeFor(t);
+  const relative = ".claude/projects/project/parent.jsonl";
+  const first = user("u1");
+  const response = assistant("a1");
+  const later = assistant("a2", "2026-08-15T10:00:00Z", basicUsage, [
+    { type: "tool_use", id: "removed-tool", name: "Bash", input: { command: "true" } },
+  ]);
+  await put(home, relative, [first, response, later]);
+  const ordered = await report(home, ["--global"]);
+  assert.equal(ordered.json.messages, 3);
+  assert.equal(ordered.json.tokens.total_tokens, 680);
+  assert.equal(ordered.json.tools[0].count, 1);
+
+  await put(home, relative, [later, response, first]);
+  const reordered = await report(home, ["--global"]);
+  assert.deepEqual(withoutGenerated(reordered.json), withoutGenerated(ordered.json));
+  assert.match(reordered.stderr, /Cache miss/);
+
+  await put(home, relative, [response, first]);
+  const rewritten = await report(home, ["--global"]);
+  assert.match(rewritten.stderr, /Cache miss/);
+  assert.equal(rewritten.json.messages, 2);
+  assert.equal(rewritten.json.tokens.total_tokens, 340);
+  assert.deepEqual(rewritten.json.tools, []);
+  assert.deepEqual(rewritten.json.days.map((day) => day.date), ["2026-08-14"]);
+  assert.ok(Math.abs(rewritten.json.costEstimate.totalCost * 2 - ordered.json.costEstimate.totalCost) < 1e-12);
+  const hit = await report(home, ["--global"]);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.match(hit.stderr, /Cache hit/);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(rewritten.json));
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(rewritten.json));
+});
+
 test("Claude cache invalidates changed files, handles corruption and clears only owned caches", async (t) => {
   const home = await homeFor(t);
   const file = await put(home, ".claude/projects/project/parent.jsonl", [user("u1"), assistant("a1")]);
