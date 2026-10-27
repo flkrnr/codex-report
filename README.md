@@ -164,7 +164,7 @@ Data locations:
 | Agent | Transcripts | Override | Report cache |
 | --- | --- | --- | --- |
 | Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v9.json` |
-| Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v4.json` |
+| Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v5.json` |
 
 Claude Desktop chat, Cowork, and remote history are not included. Reports only
 cover transcript files still present locally; they cannot recover deleted history.
@@ -175,6 +175,8 @@ Claude Code counting rules:
   API-error replies are excluded from message counts.
 - Split assistant content blocks count as one assistant response/model request.
   Whole-request usage snapshots replace earlier snapshots rather than being added.
+- Like Codex agent messages, assistant messages count only responses with visible
+  text. Tool-only and thinking-only responses add tokens and cost, not messages.
 - Request/message identities remove copied fork history and duplicate parent/subagent
   usage. Unique tool IDs are counted once, retaining their recorded call timestamps.
   Without recorded identities, separate transcript rows are treated as separate work.

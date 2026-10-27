@@ -206,7 +206,7 @@ test("Haiku 5.5 selects tiers per inclusive request, retaining snapshots and cac
   assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(bypass.json));
   const selected = await report(home, ["--global", "--from", "2026-08-15"]);
   assert.ok(Math.abs(selected.json.costEstimate.totalCost - 0.0272505) < 1e-12);
-  await fs.access(path.join(home, ".claude/cache/codex-report-claude-sessions-v4.json"));
+  await fs.access(path.join(home, ".claude/cache/codex-report-claude-sessions-v5.json"));
 });
 
 test("normalizes Claude tokens, cache write durations, reasoning and pricing", async (t) => {
@@ -255,7 +255,8 @@ test("deduplicates split blocks and usage snapshots while retaining every unique
   const first = await report(home);
   const second = await report(home);
   const uncached = await report(home, ["--no-cache"]);
-  assert.equal(first.json.messages, 2);
+  // Tool-only responses add tokens and tools but no assistant message.
+  assert.equal(first.json.messages, 1);
   assert.equal(first.json.tokens.total_tokens, 340);
   assert.equal(first.json.models[0].turns, 1);
   assert.deepEqual(first.json.tools, [{ name: "Bash", count: 1 }, { name: "Read", count: 1 }]);
@@ -273,7 +274,7 @@ test("anonymized real transcript fixture counts repeated message IDs once", asyn
   const fixture = await fs.readFile(path.join(ROOT, "test", "fixtures", "claude-real-shape.jsonl"), "utf8");
   await put(home, ".claude/projects/project/sample.jsonl", [user("prompt", "2026-08-14T07:59:00Z"), ...fixture.trim().split("\n")]);
   const { json } = await report(home, ["--global"]);
-  assert.equal(json.messages, 4);
+  assert.equal(json.messages, 2);
   assert.equal(json.models[0].turns, 1);
   assert.deepEqual(json.reasoningEfforts, [{ name: "high", turns: 1 }]);
   assert.equal(json.tokens.output_tokens, 358 + 145 + 334);
@@ -321,6 +322,27 @@ test("counts one turn per answered prompt with its first response's model and se
   assert.equal(answered.json.messages, 1);
 });
 
+test("assistant messages count responses with visible text, like Codex agent messages", async (t) => {
+  const home = await homeFor(t);
+  const tool = (id) => [{ type: "tool_use", id, name: "Bash", input: { command: "true" } }];
+  await put(home, ".claude/projects/project/parent.jsonl", [
+    user("u1"),
+    assistant("tool-only", "2026-08-14T08:01:00Z", basicUsage, tool("t1")),
+    assistant("blank", "2026-08-14T08:02:00Z", basicUsage, [{ type: "thinking", thinking: "" }, { type: "text", text: " \n" }]),
+    // The usage snapshot stays with the first fragment; the text arrives in a later one.
+    assistant("split", "2026-08-14T08:03:00Z", basicUsage, tool("t2")),
+    assistant("split", "2026-08-14T08:03:01Z", { ...basicUsage, output_tokens: 0 }, [{ type: "text", text: "Done" }]),
+  ]);
+  const { json } = await report(home);
+  assert.equal(json.messages, 2);
+  assert.equal(json.tokens.total_tokens, 3 * 340);
+  assert.equal(json.models[0].turns, 1);
+  const hit = await report(home);
+  const bypass = await report(home, ["--no-cache"]);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(json));
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(json));
+});
+
 test("reconciles fork copies and subagents before date filtering and on cache hits", async (t) => {
   const home = await homeFor(t);
   const shared = assistant("a1", undefined, basicUsage, [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "true" } }]);
@@ -339,7 +361,7 @@ test("reconciles fork copies and subagents before date filtering and on cache hi
   const warm = await report(home, ["--global"]);
   const direct = await report(home, ["--global", "--no-cache"]);
   assert.equal(cold.json.sessions, 2);
-  assert.equal(cold.json.messages, 5);
+  assert.equal(cold.json.messages, 4);
   assert.equal(cold.json.tokens.total_tokens, 1020);
   assert.equal(cold.json.tools[0].count, 1);
   assert.equal(cold.json.projects.length, 1);
@@ -430,7 +452,7 @@ test("skills use Claude Read, Bash, Skill and user evidence without catalog fals
   assert.equal(json.skills.withEvidenceCount, 1);
   const { stdout } = await run(home, ["--agent", "claude", "--skills", ...WINDOW]);
   assert.match(stdout, /2 reads/);
-  const cache = await fs.readFile(path.join(home, ".claude/cache/codex-report-claude-sessions-v4.json"), "utf8");
+  const cache = await fs.readFile(path.join(home, ".claude/cache/codex-report-claude-sessions-v5.json"), "utf8");
   assert.ok(!cache.includes("this") && !cache.includes("catalog"));
 });
 
@@ -464,7 +486,7 @@ test("reordered and rewritten Claude transcripts do not retain removed activity"
   ]);
   await put(home, relative, [first, response, later]);
   const ordered = await report(home, ["--global"]);
-  assert.equal(ordered.json.messages, 3);
+  assert.equal(ordered.json.messages, 2);
   assert.equal(ordered.json.tokens.total_tokens, 680);
   assert.equal(ordered.json.tools[0].count, 1);
 
@@ -496,7 +518,7 @@ test("Claude cache invalidates changed files, handles corruption and clears only
   const changed = await report(home);
   assert.equal(changed.json.messages, 3);
   assert.match(changed.stderr, /Cache miss/);
-  const cache = path.join(home, ".claude/cache/codex-report-claude-sessions-v4.json");
+  const cache = path.join(home, ".claude/cache/codex-report-claude-sessions-v5.json");
   await fs.writeFile(cache, "invalid");
   assert.equal((await report(home)).json.messages, 3);
   const missingModelTokens = JSON.parse(await fs.readFile(cache, "utf8"));
@@ -540,8 +562,8 @@ test("cache writes remove abandoned temporaries and long-unused older versions o
   await report(home);
   assert.deepEqual((await fs.readdir(dir)).sort(), [
     "codex-report-claude-sessions-v2.json",
-    "codex-report-claude-sessions-v4.json",
     `codex-report-claude-sessions-v4.json.${uuid.replace("e", "f")}.tmp`,
+    "codex-report-claude-sessions-v5.json",
     "codex-report-claude-sessions-v99.json",
     `unrelated.json.${uuid}.tmp`,
   ]);
@@ -590,7 +612,7 @@ test("tool calls retain event timestamps across split response fragments", async
   assert.equal(early.json.messages, 0);
   assert.equal(early.json.tools[0].count, 1);
   const late = await report(home, ["--from", "2026-08-14T11:59:00Z", "--to", "2026-08-14T12:01:00Z"]);
-  assert.equal(late.json.messages, 1);
+  assert.equal(late.json.messages, 0);
   assert.equal(late.json.tokens.total_tokens, 340);
   assert.deepEqual(late.json.tools, []);
 });
