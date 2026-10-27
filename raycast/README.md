@@ -109,9 +109,13 @@ and PNG exports use the same estimates.
 
 ## Development
 
-The bundled CLI in `assets` is a copy of the codex-report repository's `bin` and
-`lib`. After changing the CLI there, run `npm run sync-cli`; `npm test` fails
-while the copy is out of date.
+The bundled CLI in `assets` is a copy of the published
+[`codex-report`](https://www.npmjs.com/package/codex-report) npm package, pinned
+as a devDependency. To ship a new CLI release, install it with
+`npm install --save-dev --save-exact codex-report@<version>` and run
+`npm run sync-cli`. `npm run sync-cli-dev` copies unreleased changes from the
+surrounding repository for local testing; `npm test` fails until the assets
+match the pinned release again.
 
 ```sh
 npm install

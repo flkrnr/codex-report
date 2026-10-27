@@ -32,7 +32,7 @@ test("synced Raycast CLI runs in isolation with both adapters and JSON schema 1"
   const raycast = path.join(directory, "raycast");
   await fs.mkdir(raycast);
   await fs.copyFile(path.join(ROOT, "raycast", "sync-cli.mjs"), path.join(raycast, "sync-cli.mjs"));
-  await exec(process.execPath, [path.join(raycast, "sync-cli.mjs")]);
+  await exec(process.execPath, [path.join(raycast, "sync-cli.mjs"), "--dev"]);
   // Removing the originals ensures imports resolve only within the prepared assets.
   await fs.rm(path.join(directory, "lib"), { recursive: true });
   await fs.rm(path.join(directory, "bin"), { recursive: true });

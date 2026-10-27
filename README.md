@@ -38,8 +38,8 @@ npm uninstall -g codex-report
 
 A Raycast extension for macOS lives in [`raycast`](raycast). It is prepared for
 the Raycast Store but **not published there yet**, and it is not included in the
-npm package. It bundles a copy of the CLI and runs it with Raycast's own Node
-runtime, so users need neither Node.js nor the npm package; Git is used to group
+npm package. It bundles a copy of the published CLI and runs it with Raycast's
+own Node runtime, so users need neither Node.js nor the npm package; Git is used to group
 projects by repository.
 
 ![Weekly report in Raycast with stacked Codex and Claude activity and estimated API costs](raycast/metadata/codex-report-1-weekly-report.png)
