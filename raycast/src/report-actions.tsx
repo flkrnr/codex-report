@@ -79,12 +79,14 @@ export function ReportActions({
           shortcut={{ modifiers: ["cmd"], key: "arrowLeft" }}
           onAction={() => movePeriod(-1)}
         />
-        <Action
-          title="Next Period"
-          icon={Icon.ArrowRight}
-          shortcut={{ modifiers: ["cmd"], key: "arrowRight" }}
-          onAction={() => movePeriod(1)}
-        />
+        {offset < 0 && (
+          <Action
+            title="Next Period"
+            icon={Icon.ArrowRight}
+            shortcut={{ modifiers: ["cmd"], key: "arrowRight" }}
+            onAction={() => movePeriod(1)}
+          />
+        )}
         {(Object.keys(periods) as Period[]).map((value, index) => (
           <Action
             key={value}

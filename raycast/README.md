@@ -15,7 +15,7 @@ Search Raycast for **Show Codex Report** or **Show Activity Heatmap**.
 - ⌘1: Today
 - ⌘2: This Week, starting on Monday
 - ⌘3: This Month
-- ⌘← / ⌘→: Previous / next day, week, or month
+- ⌘← / ⌘→: Previous / next day, week, or month; next stops at the current period
 - Click the Agents tags: All Agents, Codex (blue), or Claude (orange)
 - ⌘4: All Agents · ⌘5: Codex · ⌘6: Claude
 - ⌘R: Refresh
