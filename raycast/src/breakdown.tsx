@@ -163,7 +163,11 @@ export function Breakdown({ kind, report, period }: { kind: Kind; report: Report
             accessories={[{ text: row.value, tooltip: row.detail }]}
             detail={
               <List.Item.Detail
-                markdown={`## ${row.name}\n\n${note}`}
+                markdown={[
+                  `## ${row.name}`,
+                  note,
+                  kind === "costs" ? (report.costAssumptions ?? []).join("\n\n") : "",
+                ].join("\n\n")}
                 metadata={
                   <List.Item.Detail.Metadata>
                     {row.fields.map(([title, value]) => (

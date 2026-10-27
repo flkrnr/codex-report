@@ -55,7 +55,8 @@ Each detail list offers Copy Summary, Copy Name, and Copy Value. Projects are
 sorted by session count. Reasoning effort counts exclude turns without recorded
 settings. Costs use the existing CLI API-equivalent estimates, including its
 Reserve alias; they do not represent subscription fees. The cached-input share
-is calculated relative to input tokens.
+is calculated relative to input tokens. The costs dashboard and cost details
+show the CLI's reported pricing assumptions, including unknown cache duration.
 
 ## Activity heatmap
 

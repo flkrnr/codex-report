@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { normalizeClaudeTokens } from "../lib/adapters/claude.js";
 
 const exec = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -55,6 +56,159 @@ function withoutGenerated(json) {
   return stable;
 }
 
+test("prices advisor iterations by their own model and keeps the selected usage snapshot", async (t) => {
+  const home = await homeFor(t);
+  const executor = { type: "message", input_tokens: 1_000, output_tokens: 100 };
+  const usage = {
+    input_tokens: 1_000, output_tokens: 100,
+    iterations: [executor, { type: "advisor_message", model: "claude-opus-5-5", input_tokens: 1_000, output_tokens: 1_000 }],
+  };
+  const response = assistant("advisor", "2026-08-14T08:01:01Z", usage);
+  response.message.model = "claude-haiku-5-5";
+  const early = { ...response, timestamp: "2026-08-14T08:01:00Z", message: { ...response.message, usage: { ...usage, iterations: [executor] } } };
+  const placeholder = { ...response, timestamp: "2026-08-14T08:01:02Z", message: { ...response.message, usage: { input_tokens: 0, output_tokens: 0 } } };
+  const relative = ".claude/projects/project/parent.jsonl";
+  await put(home, relative, [user("u"), early, response, { ...response, uuid: "copy" }, placeholder]);
+  await put(home, ".claude/projects/project/fork.jsonl", [{ ...response, timestamp: "2026-08-15T10:00:00Z" }]);
+  const first = await report(home, ["--global"]);
+  assert.ok(Math.abs(first.json.costEstimate.totalCost - 0.02415) < 1e-12);
+  assert.equal(first.json.messages, 2);
+  assert.equal(first.json.tokens.total_tokens, 3_100);
+  const models = new Map(first.json.models.map((entry) => [entry.name, entry]));
+  assert.equal(models.get("claude-haiku-5-5").tokens, 1_100);
+  assert.equal(models.get("claude-opus-5-5").tokens, 2_000);
+  assert.equal(models.get("claude-haiku-5-5").turns, 1);
+  assert.equal(models.get("claude-opus-5-5").turns, 0);
+
+  // Reverse the roles: only the advisor crosses Haiku's threshold, including cache reads/writes.
+  const longAdvisor = assistant("long-advisor", "2026-08-15T08:01:00Z", {
+    input_tokens: 1_000, output_tokens: 100,
+    iterations: [executor, {
+      type: "advisor_message", model: "claude-haiku-5-5", input_tokens: 10_001,
+      cache_read_input_tokens: 70_000, cache_creation_input_tokens: 20_000,
+      cache_creation: { ephemeral_1h_input_tokens: 10_000, ephemeral_5m_input_tokens: 10_000 },
+      output_tokens: 1_000,
+    }],
+  });
+  longAdvisor.message.model = "claude-opus-5-5";
+  await put(home, relative, [user("u"), response, longAdvisor]);
+  const combined = await report(home, ["--global"]);
+  const expected = 0.02415 + 0.0332505;
+  assert.ok(Math.abs(combined.json.costEstimate.totalCost - expected) < 1e-12);
+  assert.equal(combined.json.messages, 3);
+  assert.equal(combined.json.tokens.long_context_input_tokens, 100_001);
+  for (const values of [combined.json.agents.map((a) => a.costEstimate.totalCost), combined.json.models.map((m) => m.cost.totalCost), combined.json.days.map((d) => d.cost.totalCost), combined.json.repositories.map((r) => r.cost.totalCost)]) {
+    assert.ok(Math.abs(values.reduce((a, b) => a + b, 0) - expected) < 1e-12);
+  }
+  const selected = await report(home, ["--global", "--from", "2026-08-15"]);
+  assert.ok(Math.abs(selected.json.costEstimate.totalCost - 0.0332505) < 1e-12);
+  const hit = await report(home, ["--global"]);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.match(hit.stderr, /Cache hit/);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(combined.json));
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(combined.json));
+});
+
+test("unknown or missing advisor models stay unpriced instead of using executor rates", async (t) => {
+  const home = await homeFor(t);
+  const responses = ["claude-future-advisor", null].map((model, i) => {
+    const response = assistant(`unknown-${i}`, undefined, {
+      input_tokens: 1_000, output_tokens: 100,
+      iterations: [
+        { type: "message", input_tokens: 1_000, output_tokens: 100 },
+        { type: "advisor_message", model, input_tokens: 1_000, output_tokens: 1_000 },
+      ],
+    });
+    response.message.model = "claude-haiku-5-5";
+    return response;
+  });
+  await put(home, ".claude/projects/project/parent.jsonl", responses);
+  const { json } = await report(home, ["--global"]);
+  assert.equal(json.messages, 2);
+  assert.equal(json.tokens.total_tokens, 6_200);
+  assert.ok(Math.abs(json.costEstimate.totalCost - 0.0003) < 1e-12);
+  assert.deepEqual(json.costEstimate.unpricedModels.map((entry) => entry.model).sort(), ["(unknown)", "claude-future-advisor"]);
+  assert.equal(json.costEstimate.unpricedTokens.total_tokens, 4_000);
+  const hit = await report(home, ["--global"]);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(json));
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(json));
+});
+
+test("counts compaction iterations once and selects Haiku pricing per iteration", async (t) => {
+  const home = await homeFor(t);
+  const usage = {
+    input_tokens: 23_000, output_tokens: 1_000, output_tokens_details: { thinking_tokens: 100 },
+    iterations: [
+      { type: "compaction", input_tokens: 180_000, output_tokens: 3_500 },
+      { type: "message", input_tokens: 23_000, output_tokens: 1_000 },
+    ],
+  };
+  const response = assistant("compaction", undefined, usage);
+  response.message.model = "claude-haiku-5-5";
+  await put(home, ".claude/projects/project/parent.jsonl", [user("u"), response, { ...response, uuid: "copy" }]);
+  const { json } = await report(home, ["--global"]);
+  assert.equal(json.tokens.input_tokens, 203_000);
+  assert.equal(json.tokens.output_tokens, 4_500);
+  assert.equal(json.tokens.total_tokens, 207_500);
+  assert.equal(json.tokens.reasoning_output_tokens, 100);
+  assert.equal(json.tokens.long_context_input_tokens, 180_000);
+  assert.ok(Math.abs(json.costEstimate.totalCost - 0.10155) < 1e-12);
+  const hit = await report(home, ["--global"]);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(bypass.json));
+  const onlyCompaction = normalizeClaudeTokens({
+    input_tokens: 0, output_tokens: 0, iterations: [usage.iterations[0]],
+  }, "claude-haiku-5-5");
+  assert.equal(onlyCompaction.total_tokens, 183_500);
+  const twoShort = normalizeClaudeTokens({
+    input_tokens: 160_000, output_tokens: 20,
+    iterations: [{ input_tokens: 80_000, output_tokens: 10 }, { input_tokens: 80_000, output_tokens: 10 }],
+  }, "claude-haiku-5-5");
+  assert.equal(twoShort.input_tokens, 160_000);
+  assert.equal(twoShort.long_context_input_tokens, 0);
+});
+
+test("Haiku 5.5 selects tiers per inclusive request, retaining snapshots and cached breakdowns", async (t) => {
+  const home = await homeFor(t);
+  const usage = (input) => ({
+    input_tokens: input, cache_read_input_tokens: 70_000, cache_creation_input_tokens: 20_000,
+    cache_creation: { ephemeral_1h_input_tokens: 10_000, ephemeral_5m_input_tokens: 10_000 },
+    output_tokens: 1_000,
+  });
+  const haiku = (id, input, date = "2026-08-14T08:01:00Z") => {
+    const result = assistant(id, date, usage(input));
+    result.message.model = "claude-haiku-5-5[1m]";
+    return result;
+  };
+  const short = haiku("short", 10_000);
+  const long = haiku("long", 10_001, "2026-08-15T08:01:00Z");
+  await put(home, ".claude/projects/project/parent.jsonl", [
+    user("user"), short,
+    { ...short, uuid: "split-copy" },
+    long, haiku("another-short", 10_000),
+  ]);
+  const first = await report(home, ["--global"]);
+  const expected = 2 * 0.00545 + 0.0272505;
+  assert.ok(Math.abs(first.json.costEstimate.totalCost - expected) < 1e-12);
+  assert.equal(first.json.tokens.input_tokens, 300_001);
+  assert.equal(first.json.tokens.long_context_input_tokens, 100_001);
+  assert.equal(first.json.tokens.long_context_cached_input_tokens, 70_000);
+  assert.equal(first.json.tokens.long_context_cache_creation_input_tokens, 20_000);
+  assert.equal(first.json.tokens.long_context_output_tokens, 1_000);
+  assert.equal(first.json.costEstimate.unpricedModels.length, 0);
+  for (const values of [first.json.agents.map((a) => a.costEstimate.totalCost), first.json.models.map((m) => m.cost.totalCost), first.json.days.map((d) => d.cost.totalCost), first.json.repositories.map((r) => r.cost.totalCost)]) {
+    assert.ok(Math.abs(values.reduce((a, b) => a + b, 0) - expected) < 1e-12);
+  }
+  const hit = await report(home, ["--global"]);
+  assert.match(hit.stderr, /Cache hit/);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(bypass.json));
+  const selected = await report(home, ["--global", "--from", "2026-08-15"]);
+  assert.ok(Math.abs(selected.json.costEstimate.totalCost - 0.0272505) < 1e-12);
+  await fs.access(path.join(home, ".claude/cache/codex-report-claude-sessions-v5.json"));
+});
+
 test("normalizes Claude tokens, cache write durations, reasoning and pricing", async (t) => {
   const home = await homeFor(t);
   await put(home, ".claude/projects/project/parent.jsonl", [user("u1"), assistant("a1", undefined, {
@@ -101,7 +255,8 @@ test("deduplicates split blocks and usage snapshots while retaining every unique
   const first = await report(home);
   const second = await report(home);
   const uncached = await report(home, ["--no-cache"]);
-  assert.equal(first.json.messages, 2);
+  // Tool-only responses add tokens and tools but no assistant message.
+  assert.equal(first.json.messages, 1);
   assert.equal(first.json.tokens.total_tokens, 340);
   assert.equal(first.json.models[0].turns, 1);
   assert.deepEqual(first.json.tools, [{ name: "Bash", count: 1 }, { name: "Read", count: 1 }]);
@@ -117,14 +272,75 @@ test("deduplicates split blocks and usage snapshots while retaining every unique
 test("anonymized real transcript fixture counts repeated message IDs once", async (t) => {
   const home = await homeFor(t);
   const fixture = await fs.readFile(path.join(ROOT, "test", "fixtures", "claude-real-shape.jsonl"), "utf8");
-  await put(home, ".claude/projects/project/sample.jsonl", fixture.trim().split("\n"));
+  await put(home, ".claude/projects/project/sample.jsonl", [user("prompt", "2026-08-14T07:59:00Z"), ...fixture.trim().split("\n")]);
   const { json } = await report(home, ["--global"]);
-  assert.equal(json.messages, 3);
-  assert.equal(json.models[0].turns, 3);
+  assert.equal(json.messages, 2);
+  assert.equal(json.models[0].turns, 1);
+  assert.deepEqual(json.reasoningEfforts, [{ name: "high", turns: 1 }]);
   assert.equal(json.tokens.output_tokens, 358 + 145 + 334);
   assert.equal(json.tokens.cache_creation_input_tokens, 26195 + 2248 + 2378);
   assert.equal(json.tokens.cache_creation_1h_input_tokens, json.tokens.cache_creation_input_tokens);
   assert.ok(json.costEstimate.totalCost > 0);
+});
+
+test("counts one turn per answered prompt with its first response's model and settings", async (t) => {
+  const home = await homeFor(t);
+  const response = (id, timestamp, model, extra = {}, speed = undefined) => {
+    const result = assistant(id, timestamp, { ...basicUsage, speed }, undefined, extra);
+    result.message.model = model;
+    return result;
+  };
+  await put(home, ".claude/projects/project/parent.jsonl", [
+    user("u1", "2026-08-14T08:00:00Z"),
+    response("a1", "2026-08-14T08:01:00Z", "claude-opus-5-5", { effort: "high" }, "fast"),
+    response("a2", "2026-08-14T08:02:00Z", "claude-opus-5-5", { effort: "low" }, "standard"),
+    user("command", "2026-08-14T09:00:00Z", "<local-command-stdout>ok</local-command-stdout>"),
+    user("u2", "2026-08-14T09:01:00Z"),
+    response("a3", "2026-08-14T09:02:00Z", "claude-opus-5-5", { effort: "high" }, "standard"),
+    user("unanswered", "2026-08-14T10:00:00Z"),
+  ]);
+  await put(home, ".claude/projects/project/parent/subagents/agent-explore.jsonl", [
+    user("task", "2026-08-14T08:01:30Z", "Explore the repository", { isSidechain: true }),
+    response("s1", "2026-08-14T08:01:40Z", "claude-haiku-5-5", { isSidechain: true }),
+    response("s2", "2026-08-14T08:01:50Z", "claude-haiku-5-5", { isSidechain: true }),
+  ]);
+  const turns = (json) => Object.fromEntries(json.models.map((model) => [model.name, model.turns]));
+  const { json } = await report(home, ["--global"]);
+  assert.deepEqual(turns(json), { "claude-opus-5-5": 2, "claude-haiku-5-5": 1 });
+  assert.equal(json.messages, 10);
+  assert.equal(json.tokens.total_tokens, 5 * 340);
+  assert.deepEqual(json.reasoningEfforts, [{ name: "high", turns: 2 }]);
+  assert.deepEqual(json.serviceTiers, [{ name: "default", turns: 1 }, { name: "priority", turns: 1 }]);
+  assert.equal(json.insights.fastModePercent, 50);
+  const hit = await report(home, ["--global"]);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(json));
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(json));
+  // The prompt precedes the window; its first response still starts the turn.
+  const answered = await report(home, ["--global", "--from", "2026-08-14T08:00:30Z", "--to", "2026-08-14T08:01:20Z"]);
+  assert.deepEqual(turns(answered.json), { "claude-opus-5-5": 1 });
+  assert.equal(answered.json.messages, 1);
+});
+
+test("assistant messages count responses with visible text, like Codex agent messages", async (t) => {
+  const home = await homeFor(t);
+  const tool = (id) => [{ type: "tool_use", id, name: "Bash", input: { command: "true" } }];
+  await put(home, ".claude/projects/project/parent.jsonl", [
+    user("u1"),
+    assistant("tool-only", "2026-08-14T08:01:00Z", basicUsage, tool("t1")),
+    assistant("blank", "2026-08-14T08:02:00Z", basicUsage, [{ type: "thinking", thinking: "" }, { type: "text", text: " \n" }]),
+    // The usage snapshot stays with the first fragment; the text arrives in a later one.
+    assistant("split", "2026-08-14T08:03:00Z", basicUsage, tool("t2")),
+    assistant("split", "2026-08-14T08:03:01Z", { ...basicUsage, output_tokens: 0 }, [{ type: "text", text: "Done" }]),
+  ]);
+  const { json } = await report(home);
+  assert.equal(json.messages, 2);
+  assert.equal(json.tokens.total_tokens, 3 * 340);
+  assert.equal(json.models[0].turns, 1);
+  const hit = await report(home);
+  const bypass = await report(home, ["--no-cache"]);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(json));
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(json));
 });
 
 test("reconciles fork copies and subagents before date filtering and on cache hits", async (t) => {
@@ -145,7 +361,7 @@ test("reconciles fork copies and subagents before date filtering and on cache hi
   const warm = await report(home, ["--global"]);
   const direct = await report(home, ["--global", "--no-cache"]);
   assert.equal(cold.json.sessions, 2);
-  assert.equal(cold.json.messages, 5);
+  assert.equal(cold.json.messages, 4);
   assert.equal(cold.json.tokens.total_tokens, 1020);
   assert.equal(cold.json.tools[0].count, 1);
   assert.equal(cold.json.projects.length, 1);
@@ -155,6 +371,30 @@ test("reconciles fork copies and subagents before date filtering and on cache hi
   assert.equal(tomorrow.json.messages, 3);
   assert.equal(tomorrow.json.tokens.total_tokens, 680);
   assert.deepEqual(tomorrow.json.tools, []);
+});
+
+test("copies stay with skipped originals from before the period", async (t) => {
+  const home = await homeFor(t);
+  const original = [
+    user("u1", "2026-08-10T08:00:00Z", "hello", { sessionId: "z-parent" }),
+    assistant("a1", "2026-08-10T08:01:00Z", basicUsage, undefined, { sessionId: "z-parent" }),
+  ];
+  const file = await put(home, ".claude/projects/project/z-parent.jsonl", original);
+  await fs.utimes(file, new Date("2026-08-10T09:00:00Z"), new Date("2026-08-10T09:00:00Z"));
+  // Copied history keeps its originating session ID but may carry a newer timestamp.
+  await put(home, ".claude/projects/project/a-fork.jsonl", [
+    ...original.map((record) => ({ ...record, timestamp: "2026-08-14T08:00:00Z" })),
+    user("fork-user", "2026-08-14T09:00:00Z", "new", { sessionId: "a-fork" }),
+    assistant("fork-answer", "2026-08-14T09:01:00Z", basicUsage, undefined, { sessionId: "a-fork" }),
+  ]);
+  const period = ["--global", "--from", "2026-08-14", "--to", "2026-08-14"];
+  const cached = await report(home, period);
+  assert.match(cached.stderr, /1 outside the period skipped/);
+  assert.equal(cached.json.sessions, 1);
+  assert.equal(cached.json.messages, 2);
+  assert.equal(cached.json.tokens.total_tokens, 340);
+  const bypass = await report(home, [...period, "--no-cache"]);
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(cached.json));
 });
 
 test("Claude events use event dates and support exact timestamp windows", async (t) => {
@@ -236,7 +476,7 @@ test("skills use Claude Read, Bash, Skill and user evidence without catalog fals
   assert.equal(json.skills.withEvidenceCount, 1);
   const { stdout } = await run(home, ["--agent", "claude", "--skills", ...WINDOW]);
   assert.match(stdout, /2 reads/);
-  const cache = await fs.readFile(path.join(home, ".claude/cache/codex-report-claude-sessions-v1.json"), "utf8");
+  const cache = await fs.readFile(path.join(home, ".claude/cache/codex-report-claude-sessions-v5.json"), "utf8");
   assert.ok(!cache.includes("this") && !cache.includes("catalog"));
 });
 
@@ -260,6 +500,40 @@ test("custom homes, missing agents and unknown models remain reportable", async 
   assert.match(absent.stderr, /No local Claude Code transcripts/);
 });
 
+test("reordered and rewritten Claude transcripts do not retain removed activity", async (t) => {
+  const home = await homeFor(t);
+  const relative = ".claude/projects/project/parent.jsonl";
+  const first = user("u1");
+  const response = assistant("a1");
+  const later = assistant("a2", "2026-08-15T10:00:00Z", basicUsage, [
+    { type: "tool_use", id: "removed-tool", name: "Bash", input: { command: "true" } },
+  ]);
+  await put(home, relative, [first, response, later]);
+  const ordered = await report(home, ["--global"]);
+  assert.equal(ordered.json.messages, 2);
+  assert.equal(ordered.json.tokens.total_tokens, 680);
+  assert.equal(ordered.json.tools[0].count, 1);
+
+  await put(home, relative, [later, response, first]);
+  const reordered = await report(home, ["--global"]);
+  assert.deepEqual(withoutGenerated(reordered.json), withoutGenerated(ordered.json));
+  assert.match(reordered.stderr, /Cache miss/);
+
+  await put(home, relative, [response, first]);
+  const rewritten = await report(home, ["--global"]);
+  assert.match(rewritten.stderr, /Cache miss/);
+  assert.equal(rewritten.json.messages, 2);
+  assert.equal(rewritten.json.tokens.total_tokens, 340);
+  assert.deepEqual(rewritten.json.tools, []);
+  assert.deepEqual(rewritten.json.days.map((day) => day.date), ["2026-08-14"]);
+  assert.ok(Math.abs(rewritten.json.costEstimate.totalCost * 2 - ordered.json.costEstimate.totalCost) < 1e-12);
+  const hit = await report(home, ["--global"]);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.match(hit.stderr, /Cache hit/);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(rewritten.json));
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(rewritten.json));
+});
+
 test("Claude cache invalidates changed files, handles corruption and clears only owned caches", async (t) => {
   const home = await homeFor(t);
   const file = await put(home, ".claude/projects/project/parent.jsonl", [user("u1"), assistant("a1")]);
@@ -268,9 +542,15 @@ test("Claude cache invalidates changed files, handles corruption and clears only
   const changed = await report(home);
   assert.equal(changed.json.messages, 3);
   assert.match(changed.stderr, /Cache miss/);
-  const cache = path.join(home, ".claude/cache/codex-report-claude-sessions-v1.json");
+  const cache = path.join(home, ".claude/cache/codex-report-claude-sessions-v5.json");
   await fs.writeFile(cache, "invalid");
   assert.equal((await report(home)).json.messages, 3);
+  const missingModelTokens = JSON.parse(await fs.readFile(cache, "utf8"));
+  delete missingModelTokens.entries[file].parsed.entries.find((entry) => entry.type === "assistant").modelTokens;
+  await fs.writeFile(cache, JSON.stringify(missingModelTokens));
+  const repaired = await report(home);
+  assert.equal(repaired.json.messages, 3);
+  assert.match(repaired.stderr, /Cache miss/);
   const invalidShape = JSON.parse(await fs.readFile(cache, "utf8"));
   invalidShape.entries[file].parsed.entries = [null];
   await fs.writeFile(cache, JSON.stringify(invalidShape));
@@ -282,6 +562,48 @@ test("Claude cache invalidates changed files, handles corruption and clears only
   assert.equal(JSON.parse(cleared.stdout).clearedCacheFiles, 2);
   await assert.rejects(fs.access(cache));
   await fs.access(unrelated);
+});
+
+test("cache writes remove abandoned temporaries and long-unused older versions only", async (t) => {
+  const home = await homeFor(t);
+  await put(home, ".claude/projects/project/parent.jsonl", [user("u1"), assistant("a1")]);
+  const dir = path.join(home, ".claude/cache");
+  const uuid = "e960654a-b694-4999-a8ac-c6e8dafd0974";
+  const ages = new Map([
+    [`codex-report-claude-sessions-v1.json.${uuid}.tmp`, 11 * 60_000],
+    [`codex-report-claude-sessions-v4.json.${uuid.replace("e", "f")}.tmp`, 60_000],
+    [`unrelated.json.${uuid}.tmp`, 60 * 60_000],
+    ["codex-report-claude-sessions-v1.json", 31 * 86_400_000],
+    ["codex-report-claude-sessions-v2.json", 29 * 86_400_000],
+    ["codex-report-claude-sessions-v99.json", 365 * 86_400_000],
+  ]);
+  await fs.mkdir(dir, { recursive: true });
+  for (const [name, age] of ages) {
+    await fs.writeFile(path.join(dir, name), "{}");
+    const time = new Date(Date.now() - age);
+    await fs.utimes(path.join(dir, name), time, time);
+  }
+  await report(home);
+  assert.deepEqual((await fs.readdir(dir)).sort(), [
+    "codex-report-claude-sessions-v2.json",
+    `codex-report-claude-sessions-v4.json.${uuid.replace("e", "f")}.tmp`,
+    "codex-report-claude-sessions-v5.json",
+    "codex-report-claude-sessions-v99.json",
+    `unrelated.json.${uuid}.tmp`,
+  ]);
+});
+
+test("an interrupted cache write removes its temporary file", async (t) => {
+  const home = await homeFor(t);
+  await put(home, ".claude/projects/project/parent.jsonl", [user("u1"), assistant("a1")]);
+  // Simulate Raycast's child.kill() between writing and renaming the temporary file.
+  const preload = path.join(home, "interrupt-rename.mjs");
+  await fs.writeFile(preload, 'import fs from "node:fs/promises";\nfs.rename = () => { process.kill(process.pid, "SIGTERM"); return new Promise((resolve) => setTimeout(resolve, 10_000)); };\n');
+  await assert.rejects(
+    exec(process.execPath, ["--import", pathToFileURL(preload).href, CLI, "--agent", "claude", "--json"], { env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: "" } }),
+    (error) => error.signal === "SIGTERM",
+  );
+  assert.deepEqual(await fs.readdir(path.join(home, ".claude/cache")), []);
 });
 
 test("folder scope selects Claude projects and falls back to selected agents only", async (t) => {
@@ -314,7 +636,7 @@ test("tool calls retain event timestamps across split response fragments", async
   assert.equal(early.json.messages, 0);
   assert.equal(early.json.tools[0].count, 1);
   const late = await report(home, ["--from", "2026-08-14T11:59:00Z", "--to", "2026-08-14T12:01:00Z"]);
-  assert.equal(late.json.messages, 1);
+  assert.equal(late.json.messages, 0);
   assert.equal(late.json.tokens.total_tokens, 340);
   assert.deepEqual(late.json.tools, []);
 });

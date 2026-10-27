@@ -25,6 +25,7 @@ function dashboardMarkdown(
       ? "No activity in this period yet. Sessions are read from `~/.codex` (Codex) and `~/.claude` (Claude Code)."
       : barChart(`Activity · ${unit}`, activityBars(dates, report, metric, groupWeeks), legend),
     metric === "costs" ? "Estimated API costs · unpriced usage excluded; partial totals are marked." : "",
+    metric === "costs" ? (report.costAssumptions ?? []).join("\n\n") : "",
     error ? "Refresh failed. Showing the last successful report." : "",
   ].join("\n\n");
 }
