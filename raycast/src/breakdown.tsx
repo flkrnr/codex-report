@@ -135,9 +135,9 @@ export function Breakdown({ kind, report, period }: { kind: Kind; report: Report
       }
     >
       <List.EmptyView
-        title="No Data for This Period"
-        description="Go back and choose another period."
-        icon={Icon.BarChart}
+        title={search ? "No Matches" : "No Data for This Period"}
+        description={search ? "Try a different filter." : "Go back and choose another period."}
+        icon={search ? Icon.MagnifyingGlass : Icon.BarChart}
       />
       <List.Section
         title={period}
