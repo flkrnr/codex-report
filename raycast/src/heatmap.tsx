@@ -2,7 +2,7 @@ import { Action, ActionPanel, Detail, Icon, environment, Keyboard } from "@rayca
 import { useState } from "react";
 import { compact } from "./charts";
 import { imageMarkdown } from "./svg";
-import { AgentSelection, Metric, agentColors, agentLabels, metrics, money } from "./report-data";
+import { AgentSelection, Metric, agentColors, agentLabels, metrics, money, readingSessions } from "./report-data";
 import { useReport } from "./use-report";
 import { HeatmapPeriod, HeatmapView, buildHeatmap, heatmapRange } from "./heatmap-data";
 import { heatmapImage } from "./heatmap-chart";
@@ -43,7 +43,7 @@ ${range.from} — ${range.to}`,
       ? imageMarkdown("Activity heatmap", image, period === "year" ? 1000 : image.width)
       : error
         ? "Could not load activity. Press ⌘R to retry."
-        : "Reading local sessions…",
+        : readingSessions,
     `${activeDays} active days · ${formatValue(total)} ${metrics[metric].toLowerCase()}`,
     report?.sessions === 0
       ? "No local sessions found. Codex Report reads Codex sessions from `~/.codex` and Claude Code sessions from `~/.claude`."

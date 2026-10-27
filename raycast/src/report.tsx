@@ -1,7 +1,7 @@
 import { Detail } from "@raycast/api";
 import { useState } from "react";
 import { barChart, compact } from "./charts";
-import { AgentSelection, Report, Metric, metrics, agentColors, agentLabels } from "./report-data";
+import { AgentSelection, Report, Metric, metrics, agentColors, agentLabels, readingSessions } from "./report-data";
 import { useReport } from "./use-report";
 import { activityBars } from "./activity";
 import { Period, periodRange } from "./periods";
@@ -16,8 +16,7 @@ function dashboardMarkdown(
   groupWeeks: boolean,
   error?: string,
 ): string {
-  if (!report)
-    return error ? "## Report Unavailable\n\nPress ⌘R to try again." : `## ${title}\n\nReading local sessions…`;
+  if (!report) return error ? "## Report Unavailable\n\nPress ⌘R to try again." : `## ${title}\n\n${readingSessions}`;
   const unit = metrics[metric];
   const legend = report.selectedAgents.map((value) => ({ label: agentLabels[value], color: agentColors[value] }));
   return [

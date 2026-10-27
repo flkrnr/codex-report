@@ -98,7 +98,8 @@ and its legend.
 The extension bundles the [codex-report](https://github.com/flkrnr/codex-report)
 CLI and runs it with Raycast's Node runtime; it does not run a separate server.
 Parsed sessions are cached in `~/.codex/cache` and `~/.claude/cache`, shared with
-the CLI. A cold scan of a long history can take a while, just as it does in the CLI.
+the CLI. The first scan builds that cache and can take about a minute for a long
+history (about 50 seconds for 5,000 session files); later reports load in under a second.
 Reports run one at a time, so switching periods or agents during that scan never
 discards it.
 A bounded Raycast cache keeps successful reports across command openings.

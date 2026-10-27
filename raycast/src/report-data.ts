@@ -5,6 +5,8 @@ export type Agent = "codex" | "claude";
 export type AgentSelection = Agent | "all";
 export const agentLabels: Record<AgentSelection, string> = { all: "All Agents", codex: "Codex", claude: "Claude" };
 export const agentColors: Record<Agent, string> = { codex: "#228cf6", claude: "#D97757" };
+export const readingSessions =
+  "Reading local sessions… The first run builds a cache and can take about a minute for a long history; later reports load in under a second.";
 
 export type TokenUsage = {
   total_tokens: number;
