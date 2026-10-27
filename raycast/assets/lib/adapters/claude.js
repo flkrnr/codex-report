@@ -2,7 +2,8 @@ import os from "node:os";
 import path from "node:path";
 import { jsonlEvents, sessionFiles } from "../files.js";
 import { parseTimestamp, label, increment } from "../utils.js";
-import { emptyTokens, dailySessionFor, addTokens, addModelTokens } from "../session.js";
+import { emptyTokens, dailySessionFor, addTokens, addModelTokens, LONG_CONTEXT_TOKEN_KEYS } from "../session.js";
+import { normalizeModelName } from "../pricing.js";
 import { normalizeSkillPath, skillReadPathsFromCommand } from "../skills.js";
 
 function count(value) {
@@ -10,7 +11,7 @@ function count(value) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-export function normalizeClaudeTokens(usage) {
+function normalizeClaudeIteration(usage, model) {
   const tokens = emptyTokens();
   const writes = count(usage.cache_creation_input_tokens);
   const oneHour = Math.min(writes, count(usage.cache_creation?.ephemeral_1h_input_tokens));
@@ -23,7 +24,31 @@ export function normalizeClaudeTokens(usage) {
   tokens.output_tokens = count(usage.output_tokens);
   tokens.reasoning_output_tokens = count(usage.output_tokens_details?.thinking_tokens);
   tokens.total_tokens = tokens.input_tokens + tokens.output_tokens;
+  if (normalizeModelName(model) === "claude-haiku-5-5" && tokens.input_tokens > 100_000) {
+    for (const key of LONG_CONTEXT_TOKEN_KEYS) tokens[`long_context_${key}`] = tokens[key];
+  }
   return tokens;
+}
+
+function normalizeClaudeUsage(usage, model) {
+  const iterations = Array.isArray(usage.iterations)
+    ? usage.iterations.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+  const modelTokens = new Map();
+  // Top-level usage repeats executor work; iterations also include compaction and advisors.
+  for (const iteration of iterations.length ? iterations : [usage]) {
+    const iterationModel = iteration.type === "advisor_message" ? label(iteration.model) : label(iteration.model ?? model);
+    addModelTokens(modelTokens, iterationModel, normalizeClaudeIteration(iteration, iterationModel));
+  }
+  const executor = modelTokens.get(label(model));
+  if (executor) executor.reasoning_output_tokens = Math.max(executor.reasoning_output_tokens, count(usage.output_tokens_details?.thinking_tokens));
+  const tokens = emptyTokens();
+  for (const modelUsage of modelTokens.values()) addTokens(tokens, modelUsage);
+  return { tokens, modelTokens: [...modelTokens] };
+}
+
+export function normalizeClaudeTokens(usage, model) {
+  return normalizeClaudeUsage(usage, model).tokens;
 }
 
 function providerFor(event) {
@@ -102,11 +127,13 @@ function assistantRecord(base, event, blocks) {
   const message = event.message ?? {};
   if (message.model === "<synthetic>" || event.isApiErrorMessage) return null;
   const key = message.id ? `assistant:${message.id}:${event.requestId ?? ""}` : `assistant:${base.uuid}`;
+  const usage = message.usage ? normalizeClaudeUsage(message.usage, message.model) : { tokens: null, modelTokens: [] };
   return {
     ...base, type: "assistant", key, model: label(message.model),
-    tokens: message.usage ? normalizeClaudeTokens(message.usage) : null,
+    tokens: usage.tokens, modelTokens: usage.modelTokens,
     effort: event.perTurnEffort ?? event.effort ?? null,
     tier: recordedTier(message.usage),
+    text: blocks.some((block) => block.type === "text" && String(block.text ?? "").trim() !== ""),
     tools: toolRecords(blocks, { ...event, uuid: base.uuid }, base.cwd),
   };
 }
@@ -169,7 +196,11 @@ function mergeRecord(existing, candidate) {
   }
   return {
     ...winner,
-    record: { ...winner.record, tokens: snapshot.tokens, timestamp: snapshot.timestamp },
+    record: {
+      ...winner.record, tokens: snapshot.tokens, modelTokens: snapshot.modelTokens, timestamp: snapshot.timestamp,
+      // Split responses can carry their visible text in any fragment.
+      text: existing.record.text || candidate.record.text,
+    },
     tools,
   };
 }
@@ -190,17 +221,35 @@ function inRange(timestamp, start, end) {
   return !(start && timestamp < start) && !(end && timestamp > end);
 }
 
-function addMessage(parsed, record) {
+// Like Codex turn_context entries, a turn is a prompt that received a response; its first
+// response supplies model and settings. Each transcript (and sidechain) has its own open
+// prompt, tracked before date filtering. Subagent tasks count as their own turns.
+function turnResponseKeys(parsedSessions) {
+  const keys = new Set();
+  for (const parsed of parsedSessions) {
+    const open = new Set();
+    for (const record of [...parsed.entries].sort((a, b) => a.timestamp.localeCompare(b.timestamp))) {
+      if (record.type === "user") open.add(record.subagent);
+      else if (open.delete(record.subagent)) keys.add(record.key);
+    }
+  }
+  return keys;
+}
+
+function addMessage(parsed, record, startsTurn) {
   const daily = dailySessionFor(parsed.days, new Date(record.timestamp));
-  increment(daily.messages, record.type);
+  // Like Codex agent messages, only responses with visible text are assistant messages.
+  if (record.type === "user" || record.text) increment(daily.messages, record.type);
   for (const name of record.mentions ?? []) increment(daily.rawSkillEvidence.mentions, name);
   if (record.type !== "assistant") return;
-  increment(daily.models, record.model);
-  if (record.effort) increment(daily.reasoningEfforts, label(record.effort));
-  if (record.tier) increment(daily.serviceTiers, record.tier);
+  if (startsTurn) {
+    increment(daily.models, record.model);
+    if (record.effort) increment(daily.reasoningEfforts, label(record.effort));
+    if (record.tier) increment(daily.serviceTiers, record.tier);
+  }
   if (!record.tokens) return;
   addTokens(daily.tokens, record.tokens);
-  addModelTokens(daily.modelTokens, record.model, record.tokens);
+  for (const [model, tokens] of record.modelTokens) addModelTokens(daily.modelTokens, model, tokens);
   daily.tokenEvents += 1;
 }
 
@@ -234,10 +283,11 @@ export function reconcileClaudeSessions(parsedSessions, range) {
   const sessions = new Map();
   const seenTools = new Set();
   const parents = new Map(parsedSessions.filter((parsed) => !parsed.subagent).map((parsed) => [parsed.id, parsed]));
+  const turns = turnResponseKeys(parsedSessions);
   const records = [...canonicalRecords(parsedSessions).values()].sort((a, b) => a.record.timestamp.localeCompare(b.record.timestamp));
   for (const { parsed, record, tools } of records) {
     const session = sessionFor(sessions, parsed, record, parents);
-    if (inRange(new Date(record.timestamp), range.start, range.end)) addMessage(session, record);
+    if (inRange(new Date(record.timestamp), range.start, range.end)) addMessage(session, record, turns.has(record.key));
     addTools(session, tools, seenTools, range);
   }
   return [...sessions.values()];
@@ -246,14 +296,22 @@ export function reconcileClaudeSessions(parsedSessions, range) {
 function validCachedRecords(parsed) {
   if (!Array.isArray(parsed.entries)) return false;
   return parsed.entries.every((record) => record && ["user", "assistant"].includes(record.type)
-    && typeof record.key === "string" && typeof record.timestamp === "string");
+    && typeof record.key === "string" && typeof record.timestamp === "string"
+    && (record.type === "user" || Array.isArray(record.modelTokens)));
+}
+
+// Copied history keeps its originating session ID; subagent files belong to their parent.
+function referencedSessions(parsed) {
+  const ids = new Set(parsed.entries.map((record) => record.sessionId));
+  if (!parsed.subagent) ids.delete(parsed.id);
+  return [...ids];
 }
 
 export function claudeAdapter() {
   const home = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
   return {
-    id: "claude", name: "Claude Code", cacheVersion: 1, insightsVersion: 1,
-    cachePath: path.join(home, "cache", "codex-report-claude-sessions-v1.json"),
+    id: "claude", name: "Claude Code", cacheVersion: 5, insightsVersion: 1,
+    cachePath: path.join(home, "cache", "codex-report-claude-sessions-v5.json"),
     cachePattern: /^codex-report-claude-sessions-v\d+\.json$/,
     skillRoots: [path.join(home, "skills"), path.join(home, "plugins", "cache")],
     projectSkillRoots: [".claude/skills", ".agents/skills"],
@@ -261,5 +319,7 @@ export function claudeAdapter() {
     cacheValid: validCachedRecords,
     parse: parseClaudeFile,
     reconcile: reconcileClaudeSessions,
+    fileId: (file) => sessionOwner(file).subagent ? null : path.basename(file, ".jsonl"),
+    references: referencedSessions,
   };
 }

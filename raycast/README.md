@@ -98,11 +98,14 @@ and its legend.
 
 The extension bundles the [codex-report](https://github.com/flkrnr/codex-report)
 CLI and runs it with Raycast's Node runtime; it does not run a separate server.
-Parsed sessions are cached in `~/.codex/cache` and `~/.claude/cache`, shared with
-the CLI. The first scan builds that cache and can take about a minute for a long
-history (about 50 seconds for 5,000 session files); later reports load in under a second.
-Reports run one at a time, so switching periods or agents during that scan never
-discards it.
+Parsed sessions are cached in `~/.codex/cache` and `~/.claude/cache` and shared
+with the CLI (`npx codex-report`), so whichever runs first fills the cache for both.
+Reports only read transcripts that can cover the selected period: without a cache,
+the current week loads in about two seconds, while the full history behind the
+heatmap takes about 50 seconds once for 5,000 session files. Later reports load in
+under a second. Reports run one at a time, so switching periods or agents during a
+scan never discards it. Cache files are versioned; after an update that changes the
+format, the cache is rebuilt once.
 A bounded Raycast cache keeps successful reports across command openings.
 Previously loaded periods display immediately while a fresh report loads in the
 background; the heatmap marks this state. A new period still needs an initial
