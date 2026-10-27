@@ -12,18 +12,42 @@
   "categories": [
     "Developer Tools"
   ],
+  "keywords": [
+    "claude",
+    "claude code",
+    "codex",
+    "anthropic",
+    "openai",
+    "usage",
+    "tokens",
+    "cost",
+    "heatmap",
+    "ai"
+  ],
   "commands": [
     {
       "name": "report",
       "title": "Show Codex Report",
-      "description": "View local Codex and Claude activity and token usage",
-      "mode": "view"
+      "description": "Daily, weekly, and monthly Codex and Claude Code usage with models, costs, and projects",
+      "mode": "view",
+      "keywords": [
+        "claude",
+        "usage",
+        "tokens",
+        "cost"
+      ]
     },
     {
       "name": "heatmap",
       "title": "Show Activity Heatmap",
-      "description": "Calendar heatmap of Codex and Claude usage",
-      "mode": "view"
+      "description": "Six-month and yearly heatmap of Codex and Claude Code activity",
+      "mode": "view",
+      "keywords": [
+        "claude",
+        "codex",
+        "usage",
+        "calendar"
+      ]
     }
   ],
   "scripts": {
