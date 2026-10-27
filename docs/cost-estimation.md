@@ -286,7 +286,7 @@ Advisor iterations (`type: "advisor_message"`) use their own `model` for pricing
 and token breakdowns. Missing or unknown advisor models remain unpriced; they
 never inherit the executor's rates. Each iteration uses its own inclusive prompt
 length for Haiku 5.5 tier selection. Advisor calls add tokens and cost without
-adding chat messages or recorded assistant turns.
+adding chat messages or turns.
 
 The per-model breakdown stays with the chosen usage snapshot during split-message
 and fork reconciliation. Claude cache v4 reparses older cached records so this

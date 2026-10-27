@@ -184,15 +184,19 @@ Claude Code counting rules:
 - Each response's tokens and assistant message are attributed to its final meaningful
   usage snapshot; user messages and tool calls use their own timestamps. Timestamp
   filters run after deduplication, including when cached records are reused.
-- Codex model counts represent recorded turns; Claude counts represent distinct
-  assistant API responses. These are different units of work, not comparable human prompts.
+- Model, reasoning-effort, and Fast-mode counts use turns for both agents. Codex
+  counts `turn_context` records; a Claude turn is a prompt that received a response,
+  using the first response's model and settings. Tool loops, split responses, and
+  advisor calls add tokens and cost, not turns. Each answered subagent task counts
+  as one turn, as Codex counts turns in spawned subagent threads. Tracking ignores
+  date filters, so a response in range still starts a turn whose prompt is not.
 - Input tokens include uncached input, cache reads, and cache writes for both the
   totals and estimated costs. Output thinking tokens are already part of output.
 - Skills use actual `Read`/`Bash` reads, explicit `Skill` tool calls, and user skill
   mentions matched against the selected agents' skill registries. This is best-effort
   evidence, not a complete execution ledger.
 - Insights use recorded Claude effort and `usage.speed` settings when available.
-  Fast-mode percentages include only responses/turns with known settings. Missing
+  Fast-mode percentages include only turns with known settings. Missing
   settings display as unavailable, and JSON exposes the eligible counts.
 
 `--json` emits one JSON object on stdout, with diagnostics on stderr. Schema

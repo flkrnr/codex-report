@@ -271,14 +271,54 @@ test("deduplicates split blocks and usage snapshots while retaining every unique
 test("anonymized real transcript fixture counts repeated message IDs once", async (t) => {
   const home = await homeFor(t);
   const fixture = await fs.readFile(path.join(ROOT, "test", "fixtures", "claude-real-shape.jsonl"), "utf8");
-  await put(home, ".claude/projects/project/sample.jsonl", fixture.trim().split("\n"));
+  await put(home, ".claude/projects/project/sample.jsonl", [user("prompt", "2026-08-14T07:59:00Z"), ...fixture.trim().split("\n")]);
   const { json } = await report(home, ["--global"]);
-  assert.equal(json.messages, 3);
-  assert.equal(json.models[0].turns, 3);
+  assert.equal(json.messages, 4);
+  assert.equal(json.models[0].turns, 1);
+  assert.deepEqual(json.reasoningEfforts, [{ name: "high", turns: 1 }]);
   assert.equal(json.tokens.output_tokens, 358 + 145 + 334);
   assert.equal(json.tokens.cache_creation_input_tokens, 26195 + 2248 + 2378);
   assert.equal(json.tokens.cache_creation_1h_input_tokens, json.tokens.cache_creation_input_tokens);
   assert.ok(json.costEstimate.totalCost > 0);
+});
+
+test("counts one turn per answered prompt with its first response's model and settings", async (t) => {
+  const home = await homeFor(t);
+  const response = (id, timestamp, model, extra = {}, speed = undefined) => {
+    const result = assistant(id, timestamp, { ...basicUsage, speed }, undefined, extra);
+    result.message.model = model;
+    return result;
+  };
+  await put(home, ".claude/projects/project/parent.jsonl", [
+    user("u1", "2026-08-14T08:00:00Z"),
+    response("a1", "2026-08-14T08:01:00Z", "claude-opus-5-5", { effort: "high" }, "fast"),
+    response("a2", "2026-08-14T08:02:00Z", "claude-opus-5-5", { effort: "low" }, "standard"),
+    user("command", "2026-08-14T09:00:00Z", "<local-command-stdout>ok</local-command-stdout>"),
+    user("u2", "2026-08-14T09:01:00Z"),
+    response("a3", "2026-08-14T09:02:00Z", "claude-opus-5-5", { effort: "high" }, "standard"),
+    user("unanswered", "2026-08-14T10:00:00Z"),
+  ]);
+  await put(home, ".claude/projects/project/parent/subagents/agent-explore.jsonl", [
+    user("task", "2026-08-14T08:01:30Z", "Explore the repository", { isSidechain: true }),
+    response("s1", "2026-08-14T08:01:40Z", "claude-haiku-5-5", { isSidechain: true }),
+    response("s2", "2026-08-14T08:01:50Z", "claude-haiku-5-5", { isSidechain: true }),
+  ]);
+  const turns = (json) => Object.fromEntries(json.models.map((model) => [model.name, model.turns]));
+  const { json } = await report(home, ["--global"]);
+  assert.deepEqual(turns(json), { "claude-opus-5-5": 2, "claude-haiku-5-5": 1 });
+  assert.equal(json.messages, 10);
+  assert.equal(json.tokens.total_tokens, 5 * 340);
+  assert.deepEqual(json.reasoningEfforts, [{ name: "high", turns: 2 }]);
+  assert.deepEqual(json.serviceTiers, [{ name: "default", turns: 1 }, { name: "priority", turns: 1 }]);
+  assert.equal(json.insights.fastModePercent, 50);
+  const hit = await report(home, ["--global"]);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(json));
+  assert.deepEqual(withoutGenerated(bypass.json), withoutGenerated(json));
+  // The prompt precedes the window; its first response still starts the turn.
+  const answered = await report(home, ["--global", "--from", "2026-08-14T08:00:30Z", "--to", "2026-08-14T08:01:20Z"]);
+  assert.deepEqual(turns(answered.json), { "claude-opus-5-5": 1 });
+  assert.equal(answered.json.messages, 1);
 });
 
 test("reconciles fork copies and subagents before date filtering and on cache hits", async (t) => {
