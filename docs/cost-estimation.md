@@ -241,3 +241,21 @@ They exclude speed premiums, geography/long-context modifiers, platform-specific
 rates, web-search/server-tool fees, and subscription billing. These remain
 standard Anthropic API-equivalent estimates even when a different API host is
 recorded; no cloud billing data or credentials are read.
+
+### Haiku 5.5 request-length tiers
+
+Haiku 5.5 was checked on 2026-10-27 against the official Anthropic pricing
+table. Requests with at most 100,000 inclusive input tokens use $0.10 input,
+$0.01 cache reads, $0.125 five-minute writes, $0.20 one-hour writes and $0.50
+output per million tokens. Above 100,000 input tokens, the respective rates
+are $0.50, $0.05, $0.625, $1.00 and $2.50 for the entire request.
+
+The adapter selects the tier per request, after including cache reads and
+writes in input and before merging daily/model totals. Output length does not
+affect the threshold. Long-context token subsets preserve that decision through
+deduplication, date filtering, caching and all report breakdowns. The Claude
+cache version is bumped to v2 so old cached records are reparsed.
+
+Sonnet 5.5 cache reads were corrected to $0.10 per million on 2026-10-27;
+Sonnet 5 retains its separate $0.20 rate. The table remains a current-price
+estimate for selected usage, not a reconstruction of historical invoices.

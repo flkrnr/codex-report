@@ -55,6 +55,46 @@ function withoutGenerated(json) {
   return stable;
 }
 
+test("Haiku 5.5 selects tiers per inclusive request, retaining snapshots and cached breakdowns", async (t) => {
+  const home = await homeFor(t);
+  const usage = (input) => ({
+    input_tokens: input, cache_read_input_tokens: 70_000, cache_creation_input_tokens: 20_000,
+    cache_creation: { ephemeral_1h_input_tokens: 10_000, ephemeral_5m_input_tokens: 10_000 },
+    output_tokens: 1_000,
+  });
+  const haiku = (id, input, date = "2026-08-14T08:01:00Z") => {
+    const result = assistant(id, date, usage(input));
+    result.message.model = "claude-haiku-5-5[1m]";
+    return result;
+  };
+  const short = haiku("short", 10_000);
+  const long = haiku("long", 10_001, "2026-08-15T08:01:00Z");
+  await put(home, ".claude/projects/project/parent.jsonl", [
+    user("user"), short,
+    { ...short, uuid: "split-copy" },
+    long, haiku("another-short", 10_000),
+  ]);
+  const first = await report(home, ["--global"]);
+  const expected = 2 * 0.00545 + 0.0272505;
+  assert.ok(Math.abs(first.json.costEstimate.totalCost - expected) < 1e-12);
+  assert.equal(first.json.tokens.input_tokens, 300_001);
+  assert.equal(first.json.tokens.long_context_input_tokens, 100_001);
+  assert.equal(first.json.tokens.long_context_cached_input_tokens, 70_000);
+  assert.equal(first.json.tokens.long_context_cache_creation_input_tokens, 20_000);
+  assert.equal(first.json.tokens.long_context_output_tokens, 1_000);
+  assert.equal(first.json.costEstimate.unpricedModels.length, 0);
+  for (const values of [first.json.agents.map((a) => a.costEstimate.totalCost), first.json.models.map((m) => m.cost.totalCost), first.json.days.map((d) => d.cost.totalCost), first.json.repositories.map((r) => r.cost.totalCost)]) {
+    assert.ok(Math.abs(values.reduce((a, b) => a + b, 0) - expected) < 1e-12);
+  }
+  const hit = await report(home, ["--global"]);
+  assert.match(hit.stderr, /Cache hit/);
+  const bypass = await report(home, ["--global", "--no-cache"]);
+  assert.deepEqual(withoutGenerated(hit.json), withoutGenerated(bypass.json));
+  const selected = await report(home, ["--global", "--from", "2026-08-15"]);
+  assert.ok(Math.abs(selected.json.costEstimate.totalCost - 0.0272505) < 1e-12);
+  await fs.access(path.join(home, ".claude/cache/codex-report-claude-sessions-v2.json"));
+});
+
 test("normalizes Claude tokens, cache write durations, reasoning and pricing", async (t) => {
   const home = await homeFor(t);
   await put(home, ".claude/projects/project/parent.jsonl", [user("u1"), assistant("a1", undefined, {
@@ -236,7 +276,7 @@ test("skills use Claude Read, Bash, Skill and user evidence without catalog fals
   assert.equal(json.skills.withEvidenceCount, 1);
   const { stdout } = await run(home, ["--agent", "claude", "--skills", ...WINDOW]);
   assert.match(stdout, /2 reads/);
-  const cache = await fs.readFile(path.join(home, ".claude/cache/codex-report-claude-sessions-v1.json"), "utf8");
+  const cache = await fs.readFile(path.join(home, ".claude/cache/codex-report-claude-sessions-v2.json"), "utf8");
   assert.ok(!cache.includes("this") && !cache.includes("catalog"));
 });
 
@@ -268,7 +308,7 @@ test("Claude cache invalidates changed files, handles corruption and clears only
   const changed = await report(home);
   assert.equal(changed.json.messages, 3);
   assert.match(changed.stderr, /Cache miss/);
-  const cache = path.join(home, ".claude/cache/codex-report-claude-sessions-v1.json");
+  const cache = path.join(home, ".claude/cache/codex-report-claude-sessions-v2.json");
   await fs.writeFile(cache, "invalid");
   assert.equal((await report(home)).json.messages, 3);
   const invalidShape = JSON.parse(await fs.readFile(cache, "utf8"));
