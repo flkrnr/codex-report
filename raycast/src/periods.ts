@@ -8,7 +8,7 @@ export function calendarDate(date: Date): string {
 export function periodRange(period: Period, offset: number, now = new Date()) {
   // Local noon keeps calendar arithmetic stable across daylight-saving changes.
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
-  if (period === "week") start.setDate(start.getDate() - (start.getDay() + 6) % 7);
+  if (period === "week") start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   if (period === "month") start.setDate(1);
   if (period === "month") start.setMonth(start.getMonth() + offset);
   else start.setDate(start.getDate() + offset * (period === "week" ? 7 : 1));

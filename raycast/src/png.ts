@@ -18,7 +18,11 @@ export async function savePng(image: SvgImage, destination: string): Promise<voi
     await writeFile(source, svg);
     await exec("/usr/bin/qlmanage", ["-t", "-s", String(size * 2), "-o", directory, source], { timeout: 20_000 });
     const cropped = join(directory, "report.png");
-    await exec("/usr/bin/sips", ["-c", String(image.height * 2), String(image.width * 2), `${source}.png`, "--out", cropped], { timeout: 20_000 });
+    await exec(
+      "/usr/bin/sips",
+      ["-c", String(image.height * 2), String(image.width * 2), `${source}.png`, "--out", cropped],
+      { timeout: 20_000 },
+    );
     await copyFile(cropped, destination, constants.COPYFILE_EXCL);
   } finally {
     await rm(directory, { recursive: true, force: true });

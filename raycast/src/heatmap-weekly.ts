@@ -12,7 +12,10 @@ function weeklyContributions(days: HeatmapCell[]): Report["agentDays"] {
   const totals = new Map<Agent, Report["agentDays"][number]>();
   for (const entry of days.flatMap((day) => day.contributions)) {
     const total = totals.get(entry.agent) ?? {
-      date: days[0].date, agent: entry.agent, tokens: 0, messages: 0,
+      date: days[0].date,
+      agent: entry.agent,
+      tokens: 0,
+      messages: 0,
       cost: { totalCost: 0, pricedTokens: 0, unpricedTokens: 0 },
     };
     total.tokens += entry.tokens;
@@ -32,10 +35,13 @@ export function buildWeeklyHeatmap(map: Heatmap): WeeklyHeatmap {
     const contributions = weeklyContributions(days);
     const visible = map.agent === "all" ? contributions : contributions.filter((entry) => entry.agent === map.agent);
     weeks.push({
-      week, date: days[0].date, endDate: days[days.length - 1].date,
+      week,
+      date: days[0].date,
+      endDate: days[days.length - 1].date,
       value: days.reduce((sum, day) => sum + day.value, 0),
       totalValue: contributions.reduce((sum, entry) => sum + metricValue(entry, map.metric), 0),
-      cost: sumCosts(visible), contributions,
+      cost: sumCosts(visible),
+      contributions,
     });
   }
   return { weeks, peak: Math.max(0, ...weeks.map((week) => week.totalValue)) };
@@ -50,6 +56,6 @@ export function weeklyBlocks(week: HeatmapWeek, peak: number, agent: AgentSelect
   const height = weeklyHeight(week.value, peak);
   if (agent !== "all") return Array<Agent>(height).fill(agent);
   const codex = week.contributions.find((entry) => entry.agent === "codex");
-  const codexBlocks = week.value > 0 ? Math.round(height * metricValue(codex, metric) / week.value) : 0;
+  const codexBlocks = week.value > 0 ? Math.round((height * metricValue(codex, metric)) / week.value) : 0;
   return [...Array<Agent>(codexBlocks).fill("codex"), ...Array<Agent>(height - codexBlocks).fill("claude")];
 }

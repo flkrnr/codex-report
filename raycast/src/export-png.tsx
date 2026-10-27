@@ -47,9 +47,13 @@ export function reportCard(card: ExportCard): SvgImage {
   }
   for (const row of card.rows ?? []) {
     // Wrap long names instead of losing repository or model identity in exports.
-    const lines = Array.from(row.name).join("").match(/.{1,42}/gu) ?? [""];
+    const lines = Array.from(row.name)
+      .join("")
+      .match(/.{1,42}/gu) ?? [""];
     for (const [index, line] of lines.entries()) parts.push(label(48, y + index * 19, line));
-    parts.push(`<text x="608" y="${y}" text-anchor="end" fill="${text}" font-size="13" font-weight="600">${escapeXml(row.value)}</text>`);
+    parts.push(
+      `<text x="608" y="${y}" text-anchor="end" fill="${text}" font-size="13" font-weight="600">${escapeXml(row.value)}</text>`,
+    );
     y += lines.length * 19 + 17;
     parts.push(`<path d="M48 ${y - 9} H608" stroke="${border}"/>`);
   }
@@ -80,7 +84,10 @@ export function ExportPngAction({ card }: { card: ExportCard }) {
     try {
       const downloads = join(homedir(), "Downloads");
       await mkdir(downloads, { recursive: true });
-      const destination = join(downloads, `codex-report-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}.png`);
+      const destination = join(
+        downloads,
+        `codex-report-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}.png`,
+      );
       await savePng(reportCard(card), destination);
       saved = destination;
       toast.primaryAction = { title: "Show in Finder", onAction: () => showInFinder(destination) };
@@ -96,5 +103,12 @@ export function ExportPngAction({ card }: { card: ExportCard }) {
       running.current = false;
     }
   }
-  return <Action title="Export as PNG" icon={Icon.Download} shortcut={{ modifiers: ["cmd", "shift"], key: "e" }} onAction={exportImage} />;
+  return (
+    <Action
+      title="Export as PNG"
+      icon={Icon.Download}
+      shortcut={{ modifiers: ["cmd", "shift"], key: "e" }}
+      onAction={exportImage}
+    />
+  );
 }

@@ -16,7 +16,13 @@ export type Report = {
   schemaVersion: number;
   generatedAt: string;
   selectedAgents: Agent[];
-  agents: { agent: Agent; sessions: number; messages: number; tokens: TokenUsage; costEstimate: { totalCost: number } }[];
+  agents: {
+    agent: Agent;
+    sessions: number;
+    messages: number;
+    tokens: TokenUsage;
+    costEstimate: { totalCost: number };
+  }[];
   agentDays: { date: string; agent: Agent; messages: number; tokens: number; cost: CostSummary }[];
   period: { from: string | null; to: string };
   sessions: number;
@@ -35,13 +41,19 @@ export type Report = {
     unpricedModels: { model: string; tokens: TokenUsage }[];
   };
 };
-export const money = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+export const money = (value: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 export const count = (value: number) => value.toLocaleString("en-US");
-export const share = (value: number, total: number) => total > 0 ? `${(100 * value / total).toFixed(1)}%` : "—";
+export const share = (value: number, total: number) => (total > 0 ? `${((100 * value) / total).toFixed(1)}%` : "—");
 
-export const estimatedCostTitle = (report: Report) => report.costEstimate.unpricedModels.length ? "Estimated API Cost · Partial" : "Estimated API Cost";
-export const cachedInputShare = (report: Report) => report.tokens.input_tokens ? `${(100 * report.tokens.cached_input_tokens / report.tokens.input_tokens).toFixed(1)}%` : "—";
-export const fastModeShare = (report: Report) => report.insights.fastModePercent == null ? "Unavailable" : `${report.insights.fastModePercent}% of known turns`;
+export const estimatedCostTitle = (report: Report) =>
+  report.costEstimate.unpricedModels.length ? "Estimated API Cost · Partial" : "Estimated API Cost";
+export const cachedInputShare = (report: Report) =>
+  report.tokens.input_tokens
+    ? `${((100 * report.tokens.cached_input_tokens) / report.tokens.input_tokens).toFixed(1)}%`
+    : "—";
+export const fastModeShare = (report: Report) =>
+  report.insights.fastModePercent == null ? "Unavailable" : `${report.insights.fastModePercent}% of known turns`;
 
 export function costLabel(cost: CostSummary): string {
   if (cost.unpricedTokens > 0 && cost.pricedTokens === 0) return "Unpriced";

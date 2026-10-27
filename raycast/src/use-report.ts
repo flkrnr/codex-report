@@ -11,7 +11,12 @@ const snapshots = createReportCache(new Cache({ namespace: "reports-v1" }));
 type ReportState = { key: string; report?: Report; loading: boolean; error?: string };
 
 /** `section` limits the CLI's slow git/skill lookups to what the command shows; without `to` the CLI reports through today. */
-export function useReport(from: string, to: string | undefined, agent: AgentSelection, section: "activity" | "repositories") {
+export function useReport(
+  from: string,
+  to: string | undefined,
+  agent: AgentSelection,
+  section: "activity" | "repositories",
+) {
   const reports = useRef(new Map<string, Report>());
   const [revision, setRevision] = useState(0);
   const key = `${from}:${to ?? "today"}:${agent}:${section}`;
@@ -25,8 +30,21 @@ export function useReport(from: string, to: string | undefined, agent: AgentSele
     }
     let cancelled = false;
     setState((current) => ({ key, report: current.key === key ? current.report : snapshots.read(key), loading: true }));
-    const child = execFile(local.node, [join(environment.assetsPath, "codex-report.mjs"), "--agent", agent, "--global", "--json", `--${section}`, "--from", from, ...(to ? ["--to", to] : [])],
-      { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }, (failure, stdout) => {
+    const child = execFile(
+      local.node,
+      [
+        join(environment.assetsPath, "codex-report.mjs"),
+        "--agent",
+        agent,
+        "--global",
+        "--json",
+        `--${section}`,
+        "--from",
+        from,
+        ...(to ? ["--to", to] : []),
+      ],
+      { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 },
+      (failure, stdout) => {
         if (cancelled) return;
         try {
           if (failure) throw new Error(failure.killed ? "Report timed out. Please try again." : failure.message);
@@ -37,11 +55,20 @@ export function useReport(from: string, to: string | undefined, agent: AgentSele
           setState({ key, report, loading: false });
         } catch (reason) {
           const error = reason instanceof Error ? reason.message : String(reason);
-          setState((current) => ({ key, report: current.key === key ? current.report : undefined, loading: false, error }));
+          setState((current) => ({
+            key,
+            report: current.key === key ? current.report : undefined,
+            loading: false,
+            error,
+          }));
           void showToast({ style: Toast.Style.Failure, title: "Could Not Load Report", message: error });
         }
-      });
-    return () => { cancelled = true; child.kill(); };
+      },
+    );
+    return () => {
+      cancelled = true;
+      child.kill();
+    };
   }, [from, to, agent, section, key, revision]);
 
   function refresh() {
