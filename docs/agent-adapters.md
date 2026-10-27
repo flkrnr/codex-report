@@ -86,7 +86,9 @@ count represents. Subagent counting policy belongs to the adapter, not the core.
 that result. The public JSON schema is independent of internal/cache formats;
 additive changes preserve schema version 1, while breaking changes require a
 version change and coordinated Raycast updates. `package.json` includes `lib`,
-and `raycast/prepare.mjs` copies it with ESM metadata so the CLI runs in isolation.
+and `raycast/sync-cli.mjs` copies the pinned npm release (or, with `--dev`, the
+repository CLI) with ESM metadata into the extension assets so the CLI runs in
+isolation; the extension checks fail unless the assets match the pinned release.
 
 ## Reference
 

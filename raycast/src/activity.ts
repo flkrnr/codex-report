@@ -9,7 +9,7 @@ export function activityBars(dates: string[], report: Report, metric: Metric, gr
     let group: string | undefined;
     if (groupWeeks && (index === 0 || localDate.getDay() === 1)) {
       const monday = new Date(localDate);
-      monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7);
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
       group = `Week of ${monday.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
     }
     const activity = report.days.find((entry) => entry.date === date);
@@ -22,14 +22,14 @@ export function activityBars(dates: string[], report: Report, metric: Metric, gr
       segments: report.selectedAgents.map((agent) => {
         const contribution = report.agentDays.find((entry) => entry.date === date && entry.agent === agent);
         return {
-          label: agentLabels[agent], color: agentColors[agent],
+          label: agentLabels[agent],
+          color: agentColors[agent],
           value: metricValue(contribution, metric),
         };
       }),
     };
   });
 }
-
 
 function metricValue(activity: Report["days"][number] | undefined, metric: Metric): number {
   if (!activity) return 0;

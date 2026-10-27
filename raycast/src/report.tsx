@@ -1,20 +1,29 @@
 import { Detail } from "@raycast/api";
 import { useState } from "react";
 import { barChart, compact } from "./charts";
-import { AgentSelection, Report, Metric, metrics, agentColors, agentLabels } from "./report-data";
+import { AgentSelection, Report, Metric, metrics, agentColors, agentLabels, readingSessions } from "./report-data";
 import { useReport } from "./use-report";
 import { activityBars } from "./activity";
 import { Period, periodRange } from "./periods";
 import { ReportMetadata } from "./report-metadata";
 import { ReportActions } from "./report-actions";
 
-function dashboardMarkdown(report: Report | undefined, title: string, metric: Metric, dates: string[], groupWeeks: boolean, error?: string): string {
-  if (!report) return error ? "## Report Unavailable\n\nPress ⌘R to try again." : `## ${title}\n\nReading local sessions…`;
+function dashboardMarkdown(
+  report: Report | undefined,
+  title: string,
+  metric: Metric,
+  dates: string[],
+  groupWeeks: boolean,
+  error?: string,
+): string {
+  if (!report) return error ? "## Report Unavailable\n\nPress ⌘R to try again." : `## ${title}\n\n${readingSessions}`;
   const unit = metrics[metric];
   const legend = report.selectedAgents.map((value) => ({ label: agentLabels[value], color: agentColors[value] }));
   return [
     `## ${title}\n${compact(report.messages)} Messages · ${compact(report.tokens.total_tokens)} Tokens · ${report.sessions} Sessions`,
-    report.sessions === 0 ? "No activity in this period yet." : barChart(`Activity · ${unit}`, activityBars(dates, report, metric, groupWeeks), legend),
+    report.sessions === 0
+      ? "No activity in this period yet. Sessions are read from `~/.codex` (Codex) and `~/.claude` (Claude Code)."
+      : barChart(`Activity · ${unit}`, activityBars(dates, report, metric, groupWeeks), legend),
     metric === "costs" ? "Estimated API costs · unpriced usage excluded; partial totals are marked." : "",
     metric === "costs" ? (report.costAssumptions ?? []).join("\n\n") : "",
     error ? "Refresh failed. Showing the last successful report." : "",
@@ -34,9 +43,28 @@ export default function Command() {
     setOffset(0);
   }
   const movePeriod = (direction: number) => setOffset((value) => value + direction);
-  return <Detail isLoading={loading} navigationTitle={`Codex Report · ${title}`}
-    markdown={dashboardMarkdown(report, title, metric, dates, period === "month", error)}
-    metadata={<ReportMetadata report={report} agent={agent} onSelect={setAgent} />}
-    actions={<ReportActions report={report} title={title} period={period} agent={agent} metric={metric}
-      dates={dates} error={error} refresh={refresh} setAgent={setAgent} changePeriod={changePeriod} setMetric={setMetric} offset={offset} movePeriod={movePeriod} />} />;
+  return (
+    <Detail
+      isLoading={loading}
+      markdown={dashboardMarkdown(report, title, metric, dates, period === "month", error)}
+      metadata={<ReportMetadata report={report} agent={agent} onSelect={setAgent} />}
+      actions={
+        <ReportActions
+          report={report}
+          title={title}
+          period={period}
+          agent={agent}
+          metric={metric}
+          dates={dates}
+          error={error}
+          refresh={refresh}
+          setAgent={setAgent}
+          changePeriod={changePeriod}
+          setMetric={setMetric}
+          offset={offset}
+          movePeriod={movePeriod}
+        />
+      }
+    />
+  );
 }

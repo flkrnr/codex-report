@@ -1,25 +1,25 @@
-# Codex Report for Raycast (local MVP)
+# Codex Report
 
-Requirements: macOS, Raycast, and Node.js >= 22.15.0.
+Usage history, an activity heatmap, and estimated API costs from your local
+Codex and Claude Code sessions.
 
-From the `raycast` directory:
+The extension reads the session logs that Codex (`~/.codex`) and Claude Code
+(`~/.claude`) already write on your Mac. It needs no account or API key and
+sends nothing over the network. Git groups sessions by repository in
+**Show Projects**.
 
-```sh
-npm install
-npm run dev
-```
+Raycast does not load your shell profile, so `CODEX_HOME` or
+`CLAUDE_CONFIG_DIR` set there are not applied; the extension reads the
+default `~/.codex` and `~/.claude` folders.
 
-Open Raycast and search for **Show Codex Report**. `ray develop` imports the
-extension locally and reloads changes automatically. After stopping development
-with Ctrl+C, the last built command remains available in Raycast. No Store
-publication is required.
+Search Raycast for **Show Codex Report** or **Show Activity Heatmap**.
 
 ## Dashboard
 
 - ⌘1: Today
 - ⌘2: This Week, starting on Monday
 - ⌘3: This Month
-- ⌘← / ⌘→: Previous / next day, week, or month
+- ⌘← / ⌘→: Previous / next day, week, or month; next stops at the current period
 - Click the Agents tags: All Agents, Codex (blue), or Claude (orange)
 - ⌘4: All Agents · ⌘5: Codex · ⌘6: Claude
 - ⌘R: Refresh
@@ -94,14 +94,18 @@ with exact totals and each agent's recorded usage. Cost views flag partial
 estimates and exclude unpriced usage. Export as PNG includes the selected view
 and its legend.
 
-## Local development
+## Data and caching
 
-`prepare.mjs` copies the existing CLI into the extension assets and records the
-local Node executable path. Restart `npm run dev` after changing Node versions
-or modifying the CLI.
-
-The extension reuses the CLI parser and cache in `~/.codex/cache` and `~/.claude/cache`; it does not
-run a separate server. A cold scan can take longer, just as it does in the CLI.
+The extension bundles the [codex-report](https://github.com/flkrnr/codex-report)
+CLI and runs it with Raycast's Node runtime; it does not run a separate server.
+Parsed sessions are cached in `~/.codex/cache` and `~/.claude/cache` and shared
+with the CLI (`npx codex-report`), so whichever runs first fills the cache for both.
+Reports only read transcripts that can cover the selected period: without a cache,
+the current week loads in about two seconds, while the full history behind the
+heatmap takes about 50 seconds once for 5,000 session files. Later reports load in
+under a second. Reports run one at a time, so switching periods or agents during a
+scan never discards it. Cache files are versioned; after an update that changes the
+format, the cache is rebuilt once.
 A bounded Raycast cache keeps successful reports across command openings.
 Previously loaded periods display immediately while a fresh report loads in the
 background; the heatmap marks this state. A new period still needs an initial
@@ -109,15 +113,31 @@ scan. Refresh clears saved reports for every window and agent.
 During refresh, the previous report stays visible. If refresh fails, that report
 is explicitly marked as the last successful result.
 
-Validate the extension with:
-
-```sh
-npm run build
-npm run typecheck
-npm test
-```
-
 Category costs reuse cached model-token totals without changing the cache format.
 Unknown prices are shown as **Unpriced**; mixed priced/unpriced usage is marked
 **partial**. Cost sorting places entirely unpriced entries last. Activity cost bars
 and PNG exports use the same estimates.
+
+## Development
+
+The bundled CLI in `assets` is a copy of the published
+[`codex-report`](https://www.npmjs.com/package/codex-report) npm package, pinned
+as a devDependency. To ship a new CLI release, install it with
+`npm install --save-dev --save-exact codex-report@<version>` and run
+`npm run sync-cli`. `npm run sync-cli-dev` copies unreleased changes from the
+surrounding repository for local testing; `npm test` fails until the assets
+match the pinned release again.
+
+```sh
+npm install
+npm run dev
+```
+
+Validate the extension with:
+
+```sh
+npm run build
+npm run lint
+npm run typecheck
+npm test
+```
