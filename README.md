@@ -163,7 +163,7 @@ Data locations:
 
 | Agent | Transcripts | Override | Report cache |
 | --- | --- | --- | --- |
-| Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v9.json` |
+| Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v10.json` |
 | Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v5.json` |
 
 Claude Desktop chat, Cowork, and remote history are not included. Reports only
@@ -313,6 +313,9 @@ $ codex-report --global
   that span multiple days. Messages are counted from legacy `user_message` /
   `agent_message` events and `item_completed` user/agent messages; response-item
   copies are not counted again.
+- Subagent threads contribute to their root session and project, as Claude
+  subagents do. Automatic Guardian approval reviews add tokens and cost but no
+  messages, turns, or tool calls. User-created forks remain separate sessions.
 - Parsed daily session summaries are cached once per source file under
   `~/.codex/cache` by default. A source JSONL size or modification-time change
   invalidates its entry; date ranges and the current skill registry are applied
