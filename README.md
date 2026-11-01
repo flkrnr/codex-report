@@ -14,7 +14,7 @@ npx codex-report               # run without installing
 npm install -g codex-report    # or install globally
 ```
 
-Requires Node.js 22.15.0 or newer; there are no other dependencies.
+Requires Node.js 22.14.0 or newer; reading compressed Codex logs needs 22.15.0. There are no other dependencies.
 
 ## Usage
 

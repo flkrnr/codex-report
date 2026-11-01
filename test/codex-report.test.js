@@ -61,6 +61,24 @@ test("fails explicitly on corrupt or truncated compressed sessions", async (t) =
   }
 });
 
+test("reads plain sessions and explains compressed ones without native Zstd support", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const dir = path.join(home, ".codex", "sessions");
+  await fs.mkdir(dir, { recursive: true });
+  // Simulate Node versions before 22.15, which lack zlib.createZstdDecompress.
+  const withoutZstd = ["--import", 'data:text/javascript,import zlib from "node:zlib"; delete zlib.createZstdDecompress;'];
+  const run = (args) => execFileAsync(process.execPath, [...withoutZstd, CLI_PATH, ...args], {
+    cwd: REPO_ROOT,
+    env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "" },
+  });
+  const args = ["--global", "--no-cache", "--from", "2026-10-01", "--to", "2026-10-01"];
+  await fs.copyFile(path.join(REPO_ROOT, "test/fixtures/session.jsonl"), path.join(dir, "session.jsonl"));
+  assert.match((await run(args)).stdout, /2026-10-01\s+1 msg/);
+  await fs.copyFile(path.join(REPO_ROOT, "test/fixtures/session.jsonl.zst"), path.join(dir, "other.jsonl.zst"));
+  await assert.rejects(run(args), /requires Node\.js 22\.15\.0 or newer/);
+});
+
 test("cache-write deltas exclude the date-range baseline and are billed only once", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
   t.after(() => fs.rm(home, { recursive: true, force: true }));
