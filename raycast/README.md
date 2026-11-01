@@ -98,6 +98,8 @@ and its legend.
 
 The extension bundles the [codex-report](https://github.com/flkrnr/codex-report)
 CLI and runs it with Raycast's Node runtime; it does not run a separate server.
+Reading compressed Codex logs requires Raycast 1.104.13 or newer, whose runtime
+includes Node.js 22.15 or later.
 Parsed sessions are cached in `~/.codex/cache` and `~/.claude/cache` and shared
 with the CLI (`npx codex-report`), so whichever runs first fills the cache for both.
 Reports only read transcripts that can cover the selected period: without a cache,

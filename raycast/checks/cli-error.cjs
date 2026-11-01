@@ -9,3 +9,8 @@ test("CLI errors show the CLI's message without progress, usage, stack or Node l
   assert.equal(cliErrorMessage(crash), "Error: boom");
   assert.equal(cliErrorMessage(""), "Could not read local sessions.");
 });
+
+test("an outdated Node runtime asks to update Raycast instead", () => {
+  const stderr = "Reading compressed session logs requires Node.js 22.15.0 or newer (running v22.14.0): /x.jsonl.zst\n";
+  assert.equal(cliErrorMessage(stderr), "Compressed Codex logs need a newer Raycast. Update Raycast to load this report.");
+});
