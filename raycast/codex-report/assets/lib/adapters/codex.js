@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
-import { sessionFiles, jsonlEvents } from "../files.js";
+import { sessionFilesFromRoots, jsonlEvents } from "../files.js";
+import { extraHomes } from "../sources.js";
 import { parseTimestamp, label, increment } from "../utils.js";
 import { emptyTokens, dailySessionFor, tokenDelta, addTokens, addModelTokens, tokenVolume, mergeParsedDays } from "../session.js";
 import { recordRawSkillMentions, parseFunctionArguments, skillReadPathsFromCommand } from "../skills.js";
@@ -162,7 +163,7 @@ export function codexAdapter() {
     cachePattern: /^codex-report-sessions-v\d+\.json$/,
     skillRoots: [path.join(home, "skills"), path.join(home, "plugins", "cache")],
     projectSkillRoots: [".agents/skills"],
-    discover: () => sessionFiles(path.join(home, "sessions")),
+    discover: () => sessionFilesFromRoots([home, ...extraHomes("codex")].map((root) => path.join(root, "sessions")), threadId),
     parse: parseSessionFile,
     reconcile: reconcileCodexSessions,
     cacheValid: (parsed) => parsed.timeZone === localTimeZone(),
