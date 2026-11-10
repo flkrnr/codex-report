@@ -36,7 +36,7 @@ test("synced Raycast CLI runs in isolation with both adapters and JSON schema 1"
   // Removing the originals ensures imports resolve only within the prepared assets.
   await fs.rm(path.join(directory, "lib"), { recursive: true });
   await fs.rm(path.join(directory, "bin"), { recursive: true });
-  const { stdout } = await exec(process.execPath, [path.join(raycast, "assets", "codex-report.mjs"), "--agent", "all", "--global", "--json", "--no-cache"], {
+  const { stdout } = await exec(process.execPath, [path.join(raycast, "codex-report", "assets", "codex-report.mjs"), "--agent", "all", "--global", "--json", "--no-cache"], {
     cwd: directory,
     env: { ...process.env, HOME: directory, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "" },
   });
