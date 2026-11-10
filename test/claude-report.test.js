@@ -28,7 +28,7 @@ async function put(home, relative, events) {
 
 async function run(home, args = [], env = {}, cwd = ROOT) {
   return exec(process.execPath, [CLI, ...args], {
-    cwd, env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", ...env },
+    cwd, env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", CODEX_REPORT_CONFIG: "", XDG_CONFIG_HOME: "", ...env },
   });
 }
 
@@ -478,6 +478,19 @@ test("skills use Claude Read, Bash, Skill and user evidence without catalog fals
   assert.match(stdout, /2 reads/);
   const cache = await fs.readFile(path.join(home, ".claude/cache/codex-report-claude-sessions-v5.json"), "utf8");
   assert.ok(!cache.includes("this") && !cache.includes("catalog"));
+});
+
+test("mirrored Claude homes from the config add sessions without double counting copies", async (t) => {
+  const home = await homeFor(t);
+  const session = "11111111-1111-4111-8111-111111111111";
+  await put(home, `.claude/projects/project/${session}.jsonl`, [user("u1"), assistant("a1", undefined, basicUsage), user("u2", "2026-08-14T09:00:00Z")]);
+  await put(home, `mirror/projects/project/${session}.jsonl`, [user("u1"), assistant("a1", undefined, basicUsage)]);
+  await put(home, "mirror/projects/other/22222222-2222-4222-8222-222222222222.jsonl", [user("u3"), assistant("a3", undefined, basicUsage)]);
+  const config = path.join(home, "config.json");
+  await fs.writeFile(config, JSON.stringify({ sources: { claude: [path.join(home, "mirror")] } }));
+  const { json } = await report(home, ["--global", "--no-cache"], { CODEX_REPORT_CONFIG: config });
+  assert.equal(json.sessions, 2);
+  assert.equal(json.messages, 5);
 });
 
 test("custom homes, missing agents and unknown models remain reportable", async (t) => {

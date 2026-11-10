@@ -49,6 +49,26 @@ codex-report --agent all --global
 codex-report --agent all --agents    # per-agent totals
 ```
 
+### Transcripts from other machines
+
+To include transcripts copied or synced from another machine, list their folders in
+`~/.config/codex-report/config.json` (or the file named by `CODEX_REPORT_CONFIG`).
+Each entry is laid out like `~/.codex` or `~/.claude`, with a `sessions/` or
+`projects/` folder inside:
+
+```json
+{
+  "sources": {
+    "codex": ["~/agent-history/home-mac/codex"],
+    "claude": ["~/agent-history/home-mac/claude"]
+  }
+}
+```
+
+A thread found in several folders is counted once, from its largest copy.
+Syncthing conflict copies and `.stversions` folders are ignored. The Raycast
+extension reads the same file.
+
 ### Costs
 
 API costs are API-equivalent estimates from local token counts and list prices,

@@ -17,8 +17,10 @@ boundary in [Agent adapters](agent-adapters.md).
 - Reports include all Codex sessions in the same local `~/.codex/sessions`
   directory, even if they were created under different Codex logins. Stats are not
   split by login because the local logs do not expose a stable account identifier.
-- Sessions from other OS users, machines, or containers are not included. Use
-  `CODEX_HOME` or `CLAUDE_CONFIG_DIR` to select a custom local home.
+- Sessions from other OS users, machines, or containers are not included unless
+  their transcripts are copied locally and listed under `sources` in
+  `~/.config/codex-report/config.json` (see the README). Use `CODEX_HOME` or
+  `CLAUDE_CONFIG_DIR` to select a custom local home.
 - Claude Desktop chat, Cowork, and remote history are not included. Reports only
   cover transcript files still present locally; they cannot recover deleted history.
 - Missing agent directories produce a diagnostic on stderr and do not block the

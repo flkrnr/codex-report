@@ -24,7 +24,9 @@ An adapter factory provides:
   matching pattern for deleting report-owned caches.
 - `skillRoots`, `projectSkillRoots`: global absolute roots and project-relative
   roots for the shared skill registry.
-- `discover()`: sorted absolute paths of local transcript files.
+- `discover()`: sorted absolute paths of local transcript files, including extra
+  homes from the user config (`lib/sources.js`), with copies of one thread
+  reduced to the largest file.
 - `parse(file, context, start, end)`: parsed cache payload or `null`. `context` is
   a run-local Map shared only by that adapter. Optional dates are supplied for
   uncached precise filtering; parsing must still update prerequisite state from

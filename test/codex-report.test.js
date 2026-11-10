@@ -70,7 +70,7 @@ test("reads plain sessions and explains compressed ones without native Zstd supp
   const withoutZstd = ["--import", 'data:text/javascript,import zlib from "node:zlib"; delete zlib.createZstdDecompress;'];
   const run = (args) => execFileAsync(process.execPath, [...withoutZstd, CLI_PATH, ...args], {
     cwd: REPO_ROOT,
-    env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "" },
+    env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", CODEX_REPORT_CONFIG: "", XDG_CONFIG_HOME: "" },
   });
   const args = ["--global", "--no-cache", "--from", "2026-10-01", "--to", "2026-10-01"];
   await fs.copyFile(path.join(REPO_ROOT, "test/fixtures/session.jsonl"), path.join(dir, "session.jsonl"));
@@ -176,9 +176,43 @@ async function runReport(home, args) {
 async function runReportResult(home, args) {
   return execFileAsync(process.execPath, [CLI_PATH, ...args], {
     cwd: REPO_ROOT,
-    env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "" },
+    env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", CODEX_REPORT_CONFIG: "", XDG_CONFIG_HOME: "" },
   });
 }
+
+test("adds mirrored session homes from the config and counts copied threads once", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const thread = (id, messages) => [
+    event("2026-10-01T10:00:00Z", "session_meta", { id, cwd: REPO_ROOT }),
+    ...messages.map((message, index) => event(`2026-10-01T10:0${index + 1}:00Z`, "event_msg", { type: "user_message", message })),
+  ].join("\n");
+  const local = "01a1b08b-0000-7000-8000-000000000001";
+  const remote = "01a1b08b-0000-7000-8000-000000000002";
+  const day = path.join("sessions", "2026", "10", "01");
+  const put = async (relative, content) => {
+    await fs.mkdir(path.dirname(path.join(home, relative)), { recursive: true });
+    await fs.writeFile(path.join(home, relative), content);
+  };
+  await put(path.join(".codex", day, `rollout-2026-10-01T10-00-00-${local}.jsonl`), thread(local, ["a", "b", "c"]));
+  await put(path.join("mirror", day, `rollout-2026-10-01T10-00-00-${remote}.jsonl`), thread(remote, ["d"]));
+  // An older copy of the local thread, a Syncthing conflict copy and a kept version stay out of the totals.
+  await put(path.join("mirror", day, `rollout-2026-10-01T10-00-00-${local}.jsonl`), thread(local, ["a"]));
+  await put(path.join("mirror", day, `rollout-2026-10-01T10-00-00-${remote}.sync-conflict-20261001-120000-ABCDEFG.jsonl`), thread(remote, ["x"]));
+  await put(path.join("mirror", ".stversions", day, `rollout-2026-10-01T10-00-00-${remote}~20261001-120000.jsonl`), thread(remote, ["y"]));
+  const config = path.join(home, "config.json");
+  await fs.writeFile(config, JSON.stringify({ sources: { codex: [path.join(home, "mirror")] } }));
+  const run = async (env) => JSON.parse((await execFileAsync(process.execPath, [CLI_PATH, "--global", "--json", "--no-cache", "--from", "2026-10-01", "--to", "2026-10-01"], {
+    cwd: REPO_ROOT, env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", XDG_CONFIG_HOME: "", ...env },
+  })).stdout);
+  const merged = await run({ CODEX_REPORT_CONFIG: config });
+  assert.equal(merged.sessions, 2);
+  assert.equal(merged.messages, 4);
+  const alone = await run({ CODEX_REPORT_CONFIG: path.join(home, "missing.json") });
+  assert.equal(alone.sessions, 1);
+  await fs.writeFile(config, "{");
+  await assert.rejects(run({ CODEX_REPORT_CONFIG: config }), /Invalid JSON/);
+});
 
 test("regroups cached Codex days after a time-zone change", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
@@ -193,7 +227,7 @@ test("regroups cached Codex days after a time-zone change", async (t) => {
   const days = async (timeZone) => {
     const { stdout, stderr } = await execFileAsync(process.execPath, [CLI_PATH, "--global", "--json", "--from", "null"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", TZ: timeZone },
+      env: { ...process.env, HOME: home, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", CODEX_REPORT_CONFIG: "", XDG_CONFIG_HOME: "", TZ: timeZone },
     });
     return { dates: JSON.parse(stdout).days.map((day) => day.date), stderr };
   };
