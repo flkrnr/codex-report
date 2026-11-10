@@ -1,8 +1,8 @@
-// Copies the published codex-report CLI (pinned devDependency) into assets; the Store build only sees this folder.
+// Copies the published codex-report CLI (pinned devDependency) into codex-report/assets; the Store build only sees that folder.
 // `--dev` copies the CLI from the surrounding codex-report repository instead, for unreleased changes.
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 const root = new URL(process.argv.includes("--dev") ? "../" : "node_modules/codex-report/", import.meta.url);
-const assets = new URL("assets/", import.meta.url);
+const assets = new URL("codex-report/assets/", import.meta.url);
 mkdirSync(assets, { recursive: true });
 const source = readFileSync(new URL("bin/codex-report.js", root), "utf8");
 writeFileSync(new URL("codex-report.mjs", assets), source.replaceAll('"../lib/', '"./lib/'));

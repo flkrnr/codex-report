@@ -105,16 +105,18 @@ $ codex-report --global --agent all --from 2026-09-01
 
 ## Raycast extension
 
-A Raycast extension for macOS lives in [`raycast`](raycast). It bundles the CLI
-and runs it with Raycast's own Node runtime, so it needs neither Node.js nor the
-npm package. It is not published in the Raycast Store yet.
+A Raycast extension for macOS lives in
+[`raycast/codex-report`](raycast/codex-report). It bundles the CLI and runs it
+with Raycast's own Node runtime, so it needs neither Node.js nor the npm package.
+It is not published in the Raycast Store yet.
 
-![Weekly report in Raycast with stacked Codex and Claude activity and estimated API costs](raycast/metadata/codex-report-1-weekly-report.png)
+![Weekly report in Raycast with stacked Codex and Claude activity and estimated API costs](raycast/codex-report/metadata/codex-report-1-weekly-report.png)
 
-![Six-month activity heatmap in Raycast colored by the dominant agent](raycast/metadata/codex-report-2-activity-heatmap.png)
+![Six-month activity heatmap in Raycast colored by the dominant agent](raycast/codex-report/metadata/codex-report-2-activity-heatmap.png)
 
-See the [Raycast README](raycast/README.md) for features, shortcuts, and local
-development.
+See the [Raycast README](raycast/codex-report/README.md) for features and
+shortcuts, and [Raycast development](raycast/DEVELOPMENT.md) for syncing and
+checks.
 
 ## More details
 

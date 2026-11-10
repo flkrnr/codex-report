@@ -1,16 +1,17 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": "../codex-report/tsconfig.json",
   "compilerOptions": {
-    "rootDir": "../src",
+    "rootDir": "../codex-report/src",
     "outDir": "../.test-build",
-    "noEmit": false
+    "noEmit": false,
+    "typeRoots": ["../codex-report/node_modules/@types"]
   },
   "include": [
-    "../src/heatmap-data.ts",
-    "../src/heatmap-chart.ts",
-    "../src/svg.ts",
-    "../src/report-cache.ts",
-    "../src/cli-error.ts",
-    "../src/serial.ts"
+    "../codex-report/src/heatmap-data.ts",
+    "../codex-report/src/heatmap-chart.ts",
+    "../codex-report/src/svg.ts",
+    "../codex-report/src/report-cache.ts",
+    "../codex-report/src/cli-error.ts",
+    "../codex-report/src/serial.ts"
   ]
 }

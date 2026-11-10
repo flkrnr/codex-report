@@ -3,8 +3,9 @@ const { readFileSync, readdirSync } = require("node:fs");
 const { join } = require("node:path");
 const test = require("node:test");
 
-const extension = join(__dirname, "..");
-const published = join(extension, "node_modules/codex-report");
+const tooling = join(__dirname, "..");
+const extension = join(tooling, "codex-report");
+const published = join(tooling, "node_modules/codex-report");
 const sources = (directory) =>
   readdirSync(directory, { recursive: true })
     .filter((file) => file.endsWith(".js"))
