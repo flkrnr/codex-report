@@ -225,12 +225,13 @@ All terms are divided by 1,000,000. Known cache-write durations come from
 five-minute price and are explicitly identified as an assumption in terminal
 and JSON reports. Thinking tokens are part of output and are not added twice.
 
-The Claude table was verified on 2026-10-05 against the official
+The Claude table was verified on 2026-10-05 (Fable/Mythos 5.2 on 2026-11-12) against the official
 [Anthropic pricing table](https://platform.claude.com/docs/en/about-claude/pricing).
 Prices below are USD per million tokens:
 
 | Model family | Input | Cache read | 5m write | 1h write | Output |
 | --- | ---: | ---: | ---: | ---: | ---: |
+| Fable/Mythos 5.2 | 8 | 0.20 | 10 | 16 | 40 |
 | Fable/Mythos 5.1 | 10 | 0.25 | 12.50 | 20 | 50 |
 | Opus 5.5 | 4 | 0.20 | 5 | 8 | 20 |
 | Sonnet 5.5 | 2 | 0.10 | 2.50 | 4 | 10 |
