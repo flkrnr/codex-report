@@ -243,7 +243,7 @@ test("clears every Codex Report session cache and leaves unrelated files", async
 
   const cacheDir = path.join(home, ".codex", "cache");
   const oldCache = path.join(cacheDir, "codex-report-sessions-v1.json");
-  const currentCache = path.join(cacheDir, "codex-report-sessions-v10.json");
+  const currentCache = path.join(cacheDir, "codex-report-sessions-v11.json");
   const unrelated = path.join(cacheDir, "other-cache.json");
   await fs.mkdir(cacheDir, { recursive: true });
   await Promise.all([
@@ -318,7 +318,7 @@ test("counts skill evidence and reuses one cache entry across date ranges", asyn
   assert.match(first, /\$skill mentions\s+2/);
   assert.match(first, /demo\s+2 reads/);
 
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v10.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v11.json");
   const firstCache = JSON.parse(await fs.readFile(cachePath, "utf8"));
   assert.equal(Object.keys(firstCache.entries).length, 1);
 
@@ -359,7 +359,7 @@ test("bypasses day cache for precise timestamp ranges", async (t) => {
     "2026-08-14T12:00:00Z",
   ]);
   assert.match(output, /gpt-5\s+1 turns/);
-  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v10.json")));
+  await assert.rejects(fs.access(path.join(home, ".codex", "cache", "codex-report-sessions-v11.json")));
 });
 
 test("reuses legacy cache for reports that do not request insights", async (t) => {
@@ -393,7 +393,7 @@ test("reuses legacy cache for reports that do not request insights", async (t) =
   await fs.writeFile(firstSessionPath, sessionLines);
   await fs.writeFile(secondSessionPath, sessionLines.replace("legacy-cache", "legacy-cache-2"));
 
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v10.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v11.json");
   const range = ["--global", "--from", "2026-08-14", "--to", "2026-08-14"];
   await runReport(home, [...range, "--activity"]);
   const legacyCache = JSON.parse(await fs.readFile(cachePath, "utf8"));
@@ -591,7 +591,7 @@ test("skips rollouts outside the period and keeps their cache entries", async (t
   const current = await rollout(home, "14", threadUuid(3), thread(threadUuid(3), "2026-08-14T08:00:00Z"));
   await rollout(home, "20", threadUuid(4), thread(threadUuid(4), "2026-08-20T08:00:00Z"), "2026-08-20T09:00:00Z");
   const period = ["--global", "--json", "--from", "2026-08-14", "--to", "2026-08-14"];
-  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v10.json");
+  const cachePath = path.join(home, ".codex", "cache", "codex-report-sessions-v11.json");
   const cacheEntries = async () => Object.keys(JSON.parse(await fs.readFile(cachePath, "utf8")).entries).length;
   const withoutGenerated = ({ generatedAt, ...stable }) => stable;
 
@@ -649,6 +649,22 @@ test("forks of skipped rollouts still exclude replayed parent history", async (t
     assert.equal(json.tokens.total_tokens, 110);
     assert.equal(json.models[0].turns, 1);
   }
+});
+
+test("forks without replayed history count only their own usage", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-test-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const usage = (input, output) => ({ input_tokens: input, output_tokens: output, total_tokens: input + output });
+  const [parent, fork] = [threadUuid(1), threadUuid(2)];
+  // Subagent forks can start with a new turn whose running total includes the parent's usage.
+  await rollout(home, "14", fork, [
+    event("2026-08-14T08:00:00Z", "session_meta", { id: fork, forked_from_id: parent, cwd: REPO_ROOT }),
+    event("2026-08-14T08:01:00Z", "turn_context", { turn_id: "fork-turn", model: "gpt-5" }),
+    event("2026-08-14T08:02:00Z", "event_msg", { type: "token_count", info: { total_token_usage: usage(1050, 105), last_token_usage: usage(50, 5) } }),
+    event("2026-08-14T08:03:00Z", "event_msg", { type: "token_count", info: { total_token_usage: usage(1150, 115), last_token_usage: usage(100, 10) } }),
+  ]);
+  const { stdout } = await runReportResult(home, ["--global", "--json", "--no-cache"]);
+  assert.equal(JSON.parse(stdout).tokens.total_tokens, 165);
 });
 
 test("reports fast mode and every reasoning effort once per turn", async (t) => {
