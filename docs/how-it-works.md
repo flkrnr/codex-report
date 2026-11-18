@@ -9,7 +9,7 @@ boundary in [Agent adapters](agent-adapters.md).
 
 | Agent | Transcripts | Override | Report cache |
 | --- | --- | --- | --- |
-| Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v10.json` |
+| Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v11.json` |
 | Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v5.json` |
 
 - Both `.jsonl` and `.jsonl.zst` session logs are read. If both exist for the
