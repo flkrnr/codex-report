@@ -24,7 +24,7 @@ test("npm package includes every module required by the CLI", async (t) => {
   }
 });
 
-test("synced Raycast CLI runs in isolation with both adapters and JSON schema 1", async (t) => {
+test("synced Raycast CLI runs in isolation with all adapters and JSON schema 1", async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "codex-report-packaging-"));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   await fs.cp(path.join(ROOT, "bin"), path.join(directory, "bin"), { recursive: true });
@@ -38,11 +38,11 @@ test("synced Raycast CLI runs in isolation with both adapters and JSON schema 1"
   await fs.rm(path.join(directory, "bin"), { recursive: true });
   const { stdout } = await exec(process.execPath, [path.join(raycast, "codex-report", "assets", "codex-report.mjs"), "--agent", "all", "--global", "--json", "--no-cache"], {
     cwd: directory,
-    env: { ...process.env, HOME: directory, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "" },
+    env: { ...process.env, HOME: directory, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", ANTIGRAVITY_HOME: "" },
   });
   const report = JSON.parse(stdout);
   assert.equal(report.schemaVersion, 1);
-  assert.deepEqual(report.selectedAgents, ["codex", "claude"]);
+  assert.deepEqual(report.selectedAgents, ["codex", "claude", "antigravity"]);
   assert.equal(report.sessions, 0);
   assert.deepEqual(report.days, []);
 });
