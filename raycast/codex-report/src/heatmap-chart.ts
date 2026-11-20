@@ -1,11 +1,11 @@
 import type { SvgImage } from "./png";
-import { agentColors, agentLabels, metrics } from "./report-data";
+import { agentColors, agentLabels, agentOrder, metrics } from "./report-data";
 import { escapeXml } from "./svg";
 import { Heatmap, HeatmapView, heatmapLevel } from "./heatmap-data";
 import { WeeklyHeatmap, buildWeeklyHeatmap, weeklyBlocks } from "./heatmap-weekly";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const SOURCE_COLORS = { ...agentColors, tie: "#A78BFA" };
+const SOURCE_COLORS = { ...agentColors, tie: "#14B8A6" };
 const SOURCE_LABELS = { ...agentLabels, tie: "Equal share" };
 const OPACITY = [0, 0.35, 0.55, 0.75, 1];
 const WIDTH = 560;
@@ -136,7 +136,7 @@ export function heatmapImage(
   const bottom = round(TOP + 7 * (size + gap));
   const weekly = view === "weekly" ? buildWeeklyHeatmap(map) : undefined;
   const days = axisLabels(weekly, size, gap, muted, formatValue);
-  const agents = map.agent === "all" ? (["codex", "claude"] as const) : [map.agent];
+  const agents = map.agent === "all" ? agentOrder : [map.agent];
   const legendItems = agents.map((agent) => ({ label: agentLabels[agent], color: agentColors[agent] }));
   if (!weekly && map.cells.filter((cell) => cell.inRange).some((entry) => entry.dominantAgent === "tie"))
     legendItems.push({ label: SOURCE_LABELS.tie, color: SOURCE_COLORS.tie });

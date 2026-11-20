@@ -428,7 +428,7 @@ test("mixed reports keep default Codex behavior, inclusive tokens and eligible i
   assert.deepEqual(defaults.selectedAgents, ["codex"]);
   assert.equal(defaults.sessions, 1);
   const mixed = JSON.parse((await run(home, ["--agent", "all", "--json", ...WINDOW])).stdout);
-  assert.deepEqual(mixed.selectedAgents, ["codex", "claude"]);
+  assert.deepEqual(mixed.selectedAgents, ["codex", "claude", "antigravity"]);
   assert.equal(mixed.sessions, 2);
   assert.equal(mixed.messages, 3);
   assert.equal(mixed.tokens.total_tokens, 450);

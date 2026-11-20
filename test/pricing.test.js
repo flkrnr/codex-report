@@ -27,3 +27,18 @@ test("labels the unknown OpenAI cache retention without changing token accountin
   assert.deepEqual(notes("claude-sonnet-5-5", { input_tokens: 1_000, cache_creation_input_tokens: 500 }), []);
   assert.deepEqual(notes("unknown", { input_tokens: 1_000, cache_write_input_tokens: 500 }), []);
 });
+
+test("prices Gemini 4 and Gemini 3.8 Flash models including Antigravity effort suffixes", () => {
+  const estimate = estimateCosts(new Map([
+    ["gemini-4-neon-medium", { input_tokens: 2_000_000, cached_input_tokens: 1_000_000, output_tokens: 1_000_000 }],
+    ["gemini-4-argon-high", { input_tokens: 2_000_000, cached_input_tokens: 1_000_000, output_tokens: 1_000_000 }],
+    ["gemini-4-hydrogen-low", { input_tokens: 2_000_000, cached_input_tokens: 1_000_000, output_tokens: 1_000_000 }],
+    ["gemini-3.8-flash-medium", { input_tokens: 2_000_000, cached_input_tokens: 1_000_000, output_tokens: 1_000_000 }],
+  ]));
+  const costs = new Map(estimate.modelCosts.map((entry) => [entry.canonicalModel, entry.cost]));
+  assert.equal(costs.get("gemini-4-neon"), 18.15);
+  assert.equal(costs.get("gemini-4-argon"), 12.1);
+  assert.equal(costs.get("gemini-4-hydrogen"), 9.075);
+  assert.equal(costs.get("gemini-3.8-flash"), 4.575);
+  assert.deepEqual(estimate.unpricedModels, []);
+});

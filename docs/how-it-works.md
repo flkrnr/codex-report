@@ -11,6 +11,7 @@ boundary in [Agent adapters](agent-adapters.md).
 | --- | --- | --- | --- |
 | Codex | `~/.codex/sessions` | `CODEX_HOME` | `<codex-home>/cache/codex-report-sessions-v11.json` |
 | Claude Code | `~/.claude/projects` | `CLAUDE_CONFIG_DIR` | `<claude-home>/cache/codex-report-claude-sessions-v5.json` |
+| Antigravity | `~/.gemini/antigravity-cli/brain`, `~/.gemini/antigravity/brain`, `~/.t3/userdata/providers/antigravity/*/antigravity-acp/brain` | `ANTIGRAVITY_HOME` | `<antigravity-home>/cache/codex-report-antigravity-sessions-v1.json` |
 
 - Both `.jsonl` and `.jsonl.zst` session logs are read. If both exist for the
   same path, the plain file takes precedence to avoid double counting.

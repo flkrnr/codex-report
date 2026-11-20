@@ -293,3 +293,29 @@ The per-model breakdown stays with the chosen usage snapshot during split-messag
 and fork reconciliation. Claude cache v5 reparses older cached records so this
 attribution is preserved on cache hits. See Anthropic's
 [advisor usage and billing documentation](https://platform.claude.com/docs/en/agents-and-tools/tool-use/advisor-tool#usage-and-billing).
+
+## Antigravity and Gemini estimates
+
+Antigravity transcripts record per-request `input_tokens` (uncached),
+`cache_read_tokens`, and `output_tokens` (including thinking tokens). The adapter
+normalizes inclusive input as `input_tokens + cache_read_tokens`. Model IDs with
+effort suffixes (such as `gemini-4-neon-medium` or `claude-opus-5-5-medium`) use
+the corresponding base-model price when known.
+
+The Gemini table was checked on 2026-11-20 against the official
+[Gemini API pricing documentation](https://ai.google.dev/gemini-api/docs/pricing).
+Prices below are standard global Paid Tier rates in USD per million tokens:
+
+| Model name | Input | Cached input | Output |
+| --- | ---: | ---: | ---: |
+| `gemini-4-carbon` | $2.00 | $0.10 | $10.00 |
+| `gemini-4-argon` | $2.00 | $0.10 | $10.00 |
+| `gemini-4-neon` | $3.00 | $0.15 | $15.00 |
+| `gemini-4-hydrogen` | $1.50 | $0.075 | $7.50 |
+| `gemini-3.8-flash` | $0.75 | $0.075 | $3.75 |
+
+`gemini-4-carbon` and `gemini-4-argon` use the active introductory rates through
+2026-11-30 (scheduled standard rates from 2026-12-01 are $4.00 / $0.20 / $20.00).
+`gemini-3.8-flash` uses the active introductory rate through 2026-12-31 (scheduled
+standard rate from 2027-01-01 is $1.50 / $0.15 / $7.50). Grounding charges, batch
+discounts, priority tiers, and regional markups are excluded.

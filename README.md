@@ -38,13 +38,14 @@ Section flags: `--agents`, `--weekly`, `--monthly`, `--projects`, `--repositorie
 `--insights`, and `--skills`. `--json` prints one JSON object for scripts,
 `--no-cache` bypasses the session cache, and `--clear-cache` deletes it.
 
-### Claude Code and combined reports
+### Claude Code, Antigravity, and combined reports
 
-The default agent is Codex. Choose Claude Code or both agents explicitly; all other
+The default agent is Codex. Choose Claude Code, Antigravity, or all agents explicitly; all other
 options work the same:
 
 ```bash
 codex-report --agent claude --global --models --costs
+codex-report --agent antigravity --global --models --costs
 codex-report --agent all --global
 codex-report --agent all --agents    # per-agent totals
 ```
@@ -53,14 +54,15 @@ codex-report --agent all --agents    # per-agent totals
 
 To include transcripts copied or synced from another machine, list their folders in
 `~/.config/codex-report/config.json` (or the file named by `CODEX_REPORT_CONFIG`).
-Each entry is laid out like `~/.codex` or `~/.claude`, with a `sessions/` or
-`projects/` folder inside:
+Each entry is laid out like `~/.codex`, `~/.claude`, or `~/.gemini/antigravity-cli`, with a
+`sessions/`, `projects/`, or `brain/` folder inside:
 
 ```json
 {
   "sources": {
     "codex": ["~/agent-history/home-mac/codex"],
-    "claude": ["~/agent-history/home-mac/claude"]
+    "claude": ["~/agent-history/home-mac/claude"],
+    "antigravity": ["~/agent-history/home-mac/antigravity"]
   }
 }
 ```

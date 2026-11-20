@@ -1,4 +1,4 @@
-import type { Agent, AgentSelection, Metric, Report } from "./report-data";
+import { agentOrder, type Agent, type AgentSelection, type Metric, type Report } from "./report-data";
 import { Heatmap, HeatmapCell, metricValue, sumCosts } from "./heatmap-data";
 
 export type HeatmapWeek = Pick<HeatmapCell, "date" | "value" | "cost" | "contributions"> & {
@@ -54,8 +54,16 @@ export function weeklyHeight(value: number, peak: number): number {
 /** Whole blocks approximate shares; keep each agent in one contiguous segment. */
 export function weeklyBlocks(week: HeatmapWeek, peak: number, agent: AgentSelection, metric: Metric): Agent[] {
   const height = weeklyHeight(week.value, peak);
+  if (height === 0) return [];
   if (agent !== "all") return Array<Agent>(height).fill(agent);
-  const codex = week.contributions.find((entry) => entry.agent === "codex");
-  const codexBlocks = week.value > 0 ? Math.round((height * metricValue(codex, metric)) / week.value) : 0;
-  return [...Array<Agent>(codexBlocks).fill("codex"), ...Array<Agent>(height - codexBlocks).fill("claude")];
+  if (week.value <= 0) return [];
+  const shares = agentOrder.map((name, order) => {
+    const contribution = week.contributions.find((entry) => entry.agent === name);
+    const exact = (height * metricValue(contribution, metric)) / week.value;
+    return { name, order, count: Math.floor(exact), remainder: exact - Math.floor(exact) };
+  });
+  const missing = height - shares.reduce((sum, entry) => sum + entry.count, 0);
+  const byRemainder = [...shares].sort((a, b) => b.remainder - a.remainder || a.order - b.order);
+  for (let index = 0; index < missing; index++) byRemainder[index].count += 1;
+  return shares.flatMap((entry) => Array<Agent>(entry.count).fill(entry.name));
 }

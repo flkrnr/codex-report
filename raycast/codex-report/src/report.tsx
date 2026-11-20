@@ -22,7 +22,7 @@ function dashboardMarkdown(
   return [
     `## ${title}\n${compact(report.messages)} Messages · ${compact(report.tokens.total_tokens)} Tokens · ${report.sessions} Sessions`,
     report.sessions === 0
-      ? "No activity in this period yet. Sessions are read from `~/.codex` (Codex) and `~/.claude` (Claude Code)."
+      ? "No activity in this period yet. Sessions are read from `~/.codex` (Codex), `~/.claude` (Claude Code), and Antigravity."
       : barChart(`Activity · ${unit}`, activityBars(dates, report, metric, groupWeeks), legend),
     metric === "costs" ? "Estimated API costs · unpriced usage excluded; partial totals are marked." : "",
     metric === "costs" ? (report.costAssumptions ?? []).join("\n\n") : "",
