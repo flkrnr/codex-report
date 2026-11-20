@@ -1,10 +1,21 @@
 export type CostSummary = { totalCost: number; pricedTokens: number; unpricedTokens: number };
 export type Metric = "tokens" | "messages" | "costs";
 export const metrics: Record<Metric, string> = { tokens: "Tokens", messages: "Messages", costs: "Costs" };
-export type Agent = "codex" | "claude";
+export type Agent = "codex" | "claude" | "antigravity";
 export type AgentSelection = Agent | "all";
-export const agentLabels: Record<AgentSelection, string> = { all: "All Agents", codex: "Codex", claude: "Claude" };
-export const agentColors: Record<Agent, string> = { codex: "#228cf6", claude: "#D97757" };
+export const agentOrder: readonly Agent[] = ["codex", "claude", "antigravity"];
+export const agentSelections: readonly AgentSelection[] = ["all", ...agentOrder];
+export const agentLabels: Record<AgentSelection, string> = {
+  all: "All Agents",
+  codex: "Codex",
+  claude: "Claude",
+  antigravity: "Antigravity",
+};
+export const agentColors: Record<Agent, string> = {
+  codex: "#228cf6",
+  claude: "#D97757",
+  antigravity: "#8B7CF6",
+};
 export const readingSessions =
   "Reading local sessions… The first run builds a cache and can take about a minute for a long history; later reports load in under a second.";
 

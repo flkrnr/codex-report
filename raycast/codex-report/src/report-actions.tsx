@@ -8,6 +8,7 @@ import {
   Report,
   Metric,
   metrics,
+  agentSelections,
   agentColors,
   agentLabels,
   money,
@@ -59,7 +60,7 @@ export function ReportActions({
         onAction={refresh}
       />
       <ActionPanel.Section title="Agents">
-        {(["all", "codex", "claude"] as AgentSelection[]).map((value, index) => (
+        {agentSelections.map((value, index) => (
           <Action
             key={value}
             title={`Show ${agentLabels[value]}`}
@@ -67,7 +68,7 @@ export function ReportActions({
               source: value === agent ? Icon.CheckCircle : Icon.Circle,
               tintColor: value === "all" ? undefined : agentColors[value],
             }}
-            shortcut={{ modifiers: ["cmd"], key: String(index + 4) as "4" | "5" | "6" }}
+            shortcut={{ modifiers: ["cmd"], key: String(index + 4) as "4" | "5" | "6" | "7" }}
             onAction={() => setAgent(value)}
           />
         ))}

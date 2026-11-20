@@ -2,7 +2,7 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "codex-report",
   "title": "Codex Report",
-  "description": "Usage history, activity heatmap, and estimated API costs from local Codex and Claude Code sessions",
+  "description": "Usage history, activity heatmap, and estimated API costs from local Codex, Claude Code, and Antigravity sessions",
   "icon": "icon.png",
   "author": "flk",
   "license": "MIT",
@@ -16,6 +16,8 @@
     "claude",
     "claude code",
     "codex",
+    "antigravity",
+    "gemini",
     "anthropic",
     "openai",
     "usage",
@@ -28,10 +30,12 @@
     {
       "name": "report",
       "title": "Show Codex Report",
-      "description": "Daily, weekly, and monthly Codex and Claude Code usage with models, costs, and projects",
+      "description": "Daily, weekly, and monthly Codex, Claude Code, and Antigravity usage with models, costs, and projects",
       "mode": "view",
       "keywords": [
         "claude",
+        "antigravity",
+        "gemini",
         "usage",
         "tokens",
         "cost"
@@ -40,11 +44,12 @@
     {
       "name": "heatmap",
       "title": "Show Activity Heatmap",
-      "description": "Six-month and yearly heatmap of Codex and Claude Code activity",
+      "description": "Six-month and yearly heatmap of Codex, Claude Code, and Antigravity activity",
       "mode": "view",
       "keywords": [
         "claude",
         "codex",
+        "antigravity",
         "usage",
         "calendar"
       ]

@@ -1,16 +1,17 @@
 # Codex Report
 
 Usage history, an activity heatmap, and estimated API costs from your local
-Codex and Claude Code sessions.
+Codex, Claude Code, and Antigravity sessions.
 
-The extension reads the session logs that Codex (`~/.codex`) and Claude Code
-(`~/.claude`) already write on your Mac. It needs no account or API key and
-sends nothing over the network. Git groups sessions by repository in
-**Show Projects**.
+The extension reads the session logs that Codex (`~/.codex`), Claude Code
+(`~/.claude`), and Antigravity (`~/.gemini/antigravity-cli`,
+`~/.gemini/antigravity`, and T3 Code Antigravity ACP) already write on your Mac.
+It needs no account or API key and sends nothing over the network. Git groups
+sessions by repository in **Show Projects**.
 
-Raycast does not load your shell profile, so `CODEX_HOME` or
-`CLAUDE_CONFIG_DIR` set there are not applied; the extension reads the
-default `~/.codex` and `~/.claude` folders.
+Raycast does not load your shell profile, so `CODEX_HOME`, `CLAUDE_CONFIG_DIR`,
+or `ANTIGRAVITY_HOME` set there are not applied; the extension reads the default
+folders.
 
 Search Raycast for **Show Codex Report** or **Show Activity Heatmap**.
 
@@ -20,8 +21,8 @@ Search Raycast for **Show Codex Report** or **Show Activity Heatmap**.
 - ⌘2: This Week, starting on Monday
 - ⌘3: This Month
 - ⌘← / ⌘→: Previous / next day, week, or month; next stops at the current period
-- Click the Agents tags: All Agents, Codex (blue), or Claude (orange)
-- ⌘4: All Agents · ⌘5: Codex · ⌘6: Claude
+- Click the Agents tags: All Agents, Codex (blue), Claude (orange), or Antigravity (violet)
+- ⌘4: All Agents · ⌘5: Codex · ⌘6: Claude · ⌘7: Antigravity
 - ⌘R: Refresh
 - ⌘K: Open Actions, including switching between messages, tokens, and estimated costs or copying JSON
 - ⌘⇧C: Copy a readable summary
@@ -32,7 +33,7 @@ period; the current period ends today.
 All periods use the local time zone. The default is the current week. Activity
 charts show aligned weekday and date columns, with weekly groups in the monthly
 view. The default is All Agents; the CLI still defaults to Codex. In All Agents, each activity bar is stacked
-with Codex in blue and Claude in orange; the legend also labels the colors.
+with Codex in blue, Claude in orange, and Antigravity in violet; the legend also labels the colors.
 The selected agent filters the totals, detail lists, copied summary/JSON and PNG
 export. Switching back to a loaded agent/period reuses its report in memory;
 Refresh invalidates all loaded views. Bars share one scale across the selected period. Charts are SVG images
@@ -61,7 +62,7 @@ show the CLI's reported pricing assumptions, including unknown cache duration.
 ## Activity heatmap
 
 Open **Show Activity Heatmap** directly or use the dashboard's Actions menu.
-It defaults to tokens, both agents, and six calendar months ending today.
+It defaults to tokens, all agents, and six calendar months ending today.
 - ⌘1: Six months ending today
 - ⌘2: Current calendar year, January through December
 - ⌘3: Switch Daily / Weekly
@@ -74,20 +75,20 @@ Columns are weeks, Monday through Sunday. Month and weekday labels identify
 both axes. Grey means zero usage for the selected metric; dates outside the
 window are omitted. Four intensity levels use the combined daily peak divided
 by 64, 16, and 4, then the peak itself. These thresholds stay fixed when switching
-agents (⌘4 / ⌘5 / ⌘6), so their usage remains comparable.
+agents (⌘4 / ⌘5 / ⌘6 / ⌘7), so their usage remains comparable.
 
 Weekly stacks up to seven blocks per column using the selected metric’s weekly
 sum. The strongest combined week fills seven blocks; other nonzero weeks round
 up on a square-root scale, making smaller weeks easier to distinguish. This peak stays fixed across agent filters. Boundary weeks
 include only dates in the selected window, and empty future weeks stay visible.
-Whole blocks approximate each agent’s share of the selected metric, with Codex
-below and Claude above. Shares round to the nearest block, so small shares can
-disappear and exact ties allocate the extra block to Codex. Axis labels show
+Whole blocks approximate each agent’s share of the selected metric, stacked from
+bottom to top as Codex, Claude, and Antigravity. Shares round to whole blocks,
+so small shares can disappear and exact ties break in that order. Axis labels show
 usage thresholds rather than percentages. **Show Weekly Activity**
 opens exact weekly totals and per-agent contributions.
 
 Each day uses the color of the agent with the largest value for the selected
-metric. Exact ties use purple, labeled **Equal share** in the legend when present.
+metric. Exact ties use teal, labeled **Equal share** in the legend when present.
 Intensity shows the combined daily total, so the color indicates the winner
 rather than its share; both contributions remain available in the details. **Show Daily Activity** opens a searchable native list
 with exact totals and each agent's recorded usage. Cost views flag partial
@@ -100,7 +101,8 @@ The extension bundles the [codex-report](https://github.com/flkrnr/codex-report)
 CLI and runs it with Raycast's Node runtime; it does not run a separate server.
 Reading compressed Codex logs requires Raycast 1.104.13 or newer, whose runtime
 includes Node.js 22.15 or later.
-Parsed sessions are cached in `~/.codex/cache` and `~/.claude/cache` and shared
+Parsed sessions are cached in `~/.codex/cache`, `~/.claude/cache`, and
+`~/.gemini/antigravity-cli/cache` and shared
 with the CLI (`npx codex-report`), so whichever runs first fills the cache for both.
 Reports only read transcripts that can cover the selected period: without a cache,
 the current week loads in about two seconds, while the full history behind the

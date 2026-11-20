@@ -2,7 +2,16 @@ import { Action, ActionPanel, Detail, Icon, environment, Keyboard } from "@rayca
 import { useState } from "react";
 import { compact } from "./charts";
 import { imageMarkdown } from "./svg";
-import { AgentSelection, Metric, agentColors, agentLabels, metrics, money, readingSessions } from "./report-data";
+import {
+  AgentSelection,
+  Metric,
+  agentSelections,
+  agentColors,
+  agentLabels,
+  metrics,
+  money,
+  readingSessions,
+} from "./report-data";
 import { useReport } from "./use-report";
 import { HeatmapPeriod, HeatmapView, buildHeatmap, heatmapRange } from "./heatmap-data";
 import { heatmapImage } from "./heatmap-chart";
@@ -30,8 +39,8 @@ export default function HeatmapCommand() {
       : "";
   const note =
     view === "weekly"
-      ? "Grey = zero usage. Blocks approximate usage shares, rounded to whole blocks: Codex below, Claude above. Small shares may round to zero; see Weekly Activity for exact values. The scale stays fixed across agent filters."
-      : "Grey = zero usage. Color shows the dominant agent for the selected metric; purple indicates equal shares. The scale stays fixed across agent filters.";
+      ? "Grey = zero usage. Blocks approximate usage shares, rounded to whole blocks from bottom to top: Codex, Claude, Antigravity. Small shares may round to zero; see Weekly Activity for exact values. The scale stays fixed across agent filters."
+      : "Grey = zero usage. Color shows the dominant agent for the selected metric; teal indicates equal shares. The scale stays fixed across agent filters.";
   const viewNote =
     view === "daily"
       ? "Intensity shows the daily total."
@@ -46,7 +55,7 @@ ${range.from} — ${range.to}`,
         : readingSessions,
     `${activeDays} active days · ${formatValue(total)} ${metrics[metric].toLowerCase()}`,
     report?.sessions === 0
-      ? "No local sessions found. Codex Report reads Codex sessions from `~/.codex` and Claude Code sessions from `~/.claude`."
+      ? "No local sessions found. Codex Report reads sessions from `~/.codex` (Codex), `~/.claude` (Claude Code), and Antigravity."
       : "",
     loading && report ? "Updating local sessions… Showing the last successful report." : "",
     viewNote,
@@ -80,7 +89,7 @@ ${range.from} — ${range.to}`,
             onAction={refresh}
           />
           <ActionPanel.Section title="Agents">
-            {(["all", "codex", "claude"] as AgentSelection[]).map((value, index) => (
+            {agentSelections.map((value, index) => (
               <Action
                 key={value}
                 title={`Show ${agentLabels[value]}`}
@@ -88,7 +97,7 @@ ${range.from} — ${range.to}`,
                   source: value === agent ? Icon.CheckCircle : Icon.Circle,
                   tintColor: value === "all" ? undefined : agentColors[value],
                 }}
-                shortcut={{ modifiers: ["cmd"], key: String(index + 4) as "4" | "5" | "6" }}
+                shortcut={{ modifiers: ["cmd"], key: String(index + 4) as "4" | "5" | "6" | "7" }}
                 onAction={() => setAgent(value)}
               />
             ))}

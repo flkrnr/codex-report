@@ -96,6 +96,15 @@ test("weekly shares form contiguous Codex then Claude segments using the selecte
   const small = [entry("2026-03-03", "codex", 99, 1), entry("2026-03-04", "claude", 1, 1)];
   const result = weekly("all", "tokens", { days: small, agentDays: small });
   assert.deepEqual(weeklyBlocks(result.weeks[0], result.peak, "all", "tokens"), Array(7).fill("codex"));
+  const three = [
+    entry("2026-03-03", "codex", 40, 1),
+    entry("2026-03-04", "claude", 35, 1),
+    entry("2026-03-05", "antigravity", 25, 1),
+  ];
+  const tri = weekly("all", "tokens", { days: three, agentDays: three });
+  assert.deepEqual(weeklyBlocks(tri.weeks[0], tri.peak, "all", "tokens"), [
+    "codex", "codex", "codex", "claude", "claude", "antigravity", "antigravity",
+  ]);
   const svg = heatmapImage(buildHeatmap(report, range, "all", "tokens"), true, String, "weekly").body;
   assert.ok(tiles(svg).some((tile) => tile.y === 138 && tile.size === 17 && tile.fill === "#228cf6"));
   assert.ok(tiles(svg).some((tile) => tile.y === 117 && tile.size === 17 && tile.fill === "#D97757"));

@@ -3,6 +3,7 @@ import { compact } from "./charts";
 import {
   AgentSelection,
   Report,
+  agentSelections,
   agentColors,
   agentLabels,
   money,
@@ -17,7 +18,7 @@ export function ReportMetadata({ report, agent, onSelect }: Props) {
   return (
     <Detail.Metadata>
       <Detail.Metadata.TagList title="Agents">
-        {(["all", "codex", "claude"] as AgentSelection[]).map((value) => (
+        {agentSelections.map((value) => (
           <Detail.Metadata.TagList.Item
             key={value}
             text={`${value === agent ? "✓ " : ""}${agentLabels[value]}`}
